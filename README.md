@@ -17,4 +17,9 @@ The following are the datasets used in this project:
  - Country GDP annual growth: This dataset countains the GDP per country since1960 till 2020.
    (https://www.kaggle.com/zackerym/gdp-annual-growth-for-each-country-1960-2020)
 
-### **Datasets:**
+### **Profiling and exploration results:**
+ - I94 Immigration Data: [immigration.zip](Profiling_Results/immigration.zip)
+ - World Temperature Data: [weather.zip](Profiling_Results/weather.zip)
+ - U.S. City Demographic Data: [US-Cities.zip](Profiling_Results/US-Cities.zip) 
+ - Airport Code Table: [airports.zip](Profiling_Results/airports.zip)
+ - Country GDP annual growth: [GDP_Growth.zip](Profiling_Results/GDP_Growth.zip)
