@@ -85,12 +85,19 @@ create table Visa_Type
 	primary key(Visa_Type_Id)
 )
 
+create table NonImmigrantTemp_Type
+(
+	NonImmigTemp_Visa_Type_Code text,
+	NonImmigTemp_Visa_Type_Desc text,
+	primary key(NonImmigTemp_Visa_Type_Code)
+)
+
 create table Immigration_Trx
 (
 	Immig_Trx_Id text,
 	"Year" INT,
 	"Month" INT,
-	From_Country_Code text,
+	Citizen_Country_Code text,--I94CIT 
 	Airport_Id text,
 	Arrival_Dt Date,
 	Travel_Medium_Id INT,
@@ -109,6 +116,9 @@ create table Immigration_Trx
 	Allowed_Stay_Dt DATE,
 	Gender char(1),
 	Ins_Number INT,
-	
+	Airline_Code text,
+	admisison_Number float,
+	FLight_Number text,
+	NonImmigTemp_Visa_Type_Code text,
 	primary key(Immig_Trx_Id)
 )
