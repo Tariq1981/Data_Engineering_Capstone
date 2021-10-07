@@ -22,18 +22,86 @@ for the final model.
     2- Android app required permissions: This dataset contains the permissions required by each app on google app store. This dataset is in json format. The link for this dataset is https://www.kaggle.com/gauthamp10/app-permissions-android?select=googleplay-app-permission.json
  - ### **Profiling the dataset:**
    Profiling has been done on the first dataset only as it contains the main attributes for this model.[Googl_App_Store.zip](Profiling_Results/Googl_App_Store.zip)
- - ### **Modelling:** 
-   The model contains two layers:
+   - ### **Modelling:** 
+     The model contains two layers:
    
-   1- **Detail SnowFlake Schema:** This layer contains the data in a SnowFlake shmea with no aggregation. This is to support building any needed data mart
-      for any future requirements. It will also serve any ad hoc queries cannot be addressed by the developed data marts in the Stark schema model.
-      The list of tables included in this layer as follow:
-   - App: It is main fact table and hold the information for any app on Google play store. It contains the folllowing columms:
-     - App_Id: A string for app that serves as an id for the app.
-     - 
-   ![First Layer](images/appstoreERD.png)
+     **1- Detail SnowFlake Schema:** This layer contains the data in a SnowFlake shmea with no aggregation. This is to support building any needed data mart
+        for any future requirements. It will also serve any ad hoc queries cannot be addressed by the developed data marts in the Stark schema model.
+        The list of tables included in this layer as follow:
+     - App: It is main fact table and hold the information for any app on Google play store. It contains the folllowing columms:
+       - App_Id: A string for app that serves as an id for the app.
+       - App_Name: Name of the app on app store
+       - Category_Id: Foreign key to the table App_Category.
+       - Rating: The overall rating for the app
+       - Rating_Num: Number of users who rated the app.
+       - Minimum_Installs: Minimum number of installs for the app.
+       - Maximum_Installs: Maximum number of installs for the app.
+       - Is_Free: Flag to indicate if the app free
+       - Price: Price of the app on google app store.
+       - Currency_Type_Id: Foreign key to the table Currency_Type.
+       - Siz_In_MB: Disk Size of the app in megabytes.
+       - Min_OS_Version: Minimum Android OS version supported by the app.
+       - Developer_Id: Foreign key to the table Developer.
+       - Relase_Dt: The first release date for the app.
+       - Last_Update_Dt: The date for the last update of this app.
+       - Cont_Rating_Id: Foreign key to the table Content_Rating.
+       - Privacy_Policy: URL for the privacy policy for this app.
+       - Is_Ad_Supported: A flag if the app contains ads.
+       - Is_In_App_Purchase: A flag if there is addiotnal purchase will be required for extra contents or extra features.
+       - Is_Editor_Choice: A Flag if the app one of the best Android apps of all-time on Google Play Store.
+       - Scrapped_Dttm: Technical column for recording the scrapping timestamp for the app from Google Play Store. 
+     - App_Category: This is a lookup table for different App categories.
+       - Category_Id: Unique Id for the table.
+       - Category_Desc: The category name or description.
+     - Content_Rating: This is a lookup table for the different content rating
+       - Cont_Rating_Id: Unique Id for the table.
+       - Cont_Rating_Desc: Name of description for the content rating.
+     - Developer: This is a lookup table for the developers who developed the apps
+       - Developer_Id: Unique id for the table
+       - Developer_Name: Unique name for the developer.
+       - Developer_Website: The developer website.
+       - Developer_Email: The developer email.
+     - Currency_Type: A small lookup table for the different used currencies.
+       - Currency_Type_Id: Unique id for the table.
+       - Currency_Type_Desc: Name of description for the currency.
+     - Permission: A lookup table for all the permissions which can be requested by the app.
+       - Permission_Id: Unique id for the table.
+       - Permission_Decs: Name of description of the app permission.
+       - Permission_Type_Id: Foreign key to the table Permission_Type.
+     - Permission_Type: A lookup table for all the possible permission types.
+       - Permission_Type_Id:Unique id for the table.
+       - Permission_Type_Desc: Name or description for the permission type.
+     - App_Permission: A table which list which app needs which permission. It is a many-to-many relation between the App and permission tables.
+       - App_Id: the foreign key form the App table
+       - Permission_Id: The foreign key from Permission table.
+     
+     ![First Layer](images/appstoreERD.png)
    
-       2- Start Scehma Layer: This will include any data mart to be developed to serve the defined scope for this project. It can also contains other future data marts.
+      **2- Aggregated Start Schema:** This will include any data mart to be developed to serve the defined scope for this project. It can also contain other future data marts.It will use the lookups from the first layer as dimensions.
+   This layer contain the following tables:
+     - App_Fact: This table contains number of measures aggregated per number of dimensions as per the below diagrams. It contain the following columns:
+       - Auto_App_Id: Auto generated key for the table
+       - Category_Id: Foreign key to the dimension table App_Category.
+       - Currency_Type_Id: Foreign key to the dimension table Currency_Type.
+       - Developer_Id: Foreign key to the dimension table Developer.
+       - Release_Year: Year of the first release for the app.
+       - Release_Month: Month of the first release for the app.
+       - Cont_Rating_Id: Foreign key to the dimension table Content_Rating.
+       - Permission_Type_Id: Foreign key to the dimension table Permission_Type.
+       - Total_Num_Permissions: Total number of permissions per the dimensions in the diagram.
+       - Count_Of_Apps: Count of apps per the dimensions in the diagram.
+       - Average_Rating: Average rating per the dimensions in the diagram.
+       - Total_Rating_Num: Total number of users rated the apps per the dimensions in the diagram.
+       - Total_Installs: Total number of installations per the dimensions in the diagram.
+       - Count_Of_Free: Count of free apps per the dimensions in the diagram.
+       - Count_Of_Paid: Count of non-free apps per the dimensions in the diagram.
+       - Total_Price: Total price per the dimensions in the diagram. It can be used to get the average.
+       - Total_Size_In_MB: Total disk size in MB per the dimensions in the diagram.
+       - Count_Ad_Supported: Count of apps with ad supported per the dimensions in the diagram.
+       - Count_In_App_Purchase: Count of apps with In-purchase feature per the dimensions in the diagram.
+       - Count_Of_Editor_Choice: count of apps flaged as Editor-Choice per the dimensions in the diagram.
+       
+  ![Second Layer](images/Agg_appstoreERD.png) 
 
         
     
