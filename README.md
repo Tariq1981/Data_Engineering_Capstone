@@ -101,7 +101,20 @@ for the final model.
        - Count_In_App_Purchase: Count of apps with In-purchase feature per the dimensions in the diagram.
        - Count_Of_Editor_Choice: count of apps flaged as Editor-Choice per the dimensions in the diagram.
        
-  ![Second Layer](images/Agg_appstoreERD.png) 
+  ![Second Layer](images/Agg_appstoreERD.png)
+
+   - ### **Architecture:**
+     - The following AWS components are used in composing the architecture used to implementing the loading process for the data:
+       - S3: It will serve as a landing area for the data which are scrapped from google play store. It will also serve as a data lake which will hold the first model layer.
+       - EMR: This will be the Hadoop cluster which will be used to run spark jobs.
+       - Redshift: This will model the aggregation layer which will serve the reporting requirements and the BI tool can connect to it and generate whatever reports.
+       - AirFlow: It will be used to put all things togather and manage the whole workflow for loading the first nd second layer.
+       
+![Arrchitecture](images\AWS_Architecture.png)       
+     
+  - ### **Loading Steps:**
+    - 
+         - and put image and describe the ETL steps
 
         
     
