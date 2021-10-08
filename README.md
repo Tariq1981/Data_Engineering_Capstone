@@ -110,7 +110,7 @@ for the final model.
        - Redshift: This will model the aggregation layer which will serve the reporting requirements and the BI tool can connect to it and generate whatever reports.
        - AirFlow: It will be used to put all things togather and manage the whole workflow for loading the first nd second layer.
        
-![Arrchitecture](images\AWS_Architecture.png)       
+![Arrchitecture](images/AWS_Architecture.png)       
      
   - ### **Loading Steps:**
     - 
