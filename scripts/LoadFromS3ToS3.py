@@ -1,7 +1,8 @@
 import configparser
 import os
 from pyspark.sql import SparkSession
-
+from pyspark.sql.window import Window
+import pyspark.sql.functions as fn
 config = configparser.ConfigParser()
 config.read('../config/etl.cfg')
 
@@ -47,11 +48,15 @@ def process_google_apps_data(spark, input_data, output_data):
         .option("dateFormat","MMM d, yyyy")\
         .option("timestampFormat", "yyyy-MM-dd hh:mm:ss").csv(googleapp_data)
 
-    df_cat=getCategoryTable(spark,df,output_data)
-    df.show()
+    df_cat=getCategoryTable(spark,df,output_data)# Make this genereic to be used with other tables.
+    df_cat.cache()
+    df_cat.show()
+    df_cat.write.mode("overwrite").parquet(output_data+config["DL_TABLES"]["APP_CATEGORY_TBL"])
+
 
 
 def getCategoryTable(spark,df,output_data):
+
     """
     Read cateogry and merge with what in te df after getting max ID and increase
 
@@ -60,8 +65,31 @@ def getCategoryTable(spark,df,output_data):
     :param output_data:
     :return:
     """
-    cat_df = spark.read.parquet(output_data+config["DL_TABLES"]["APP_CATEGORY_TBL"])
-    return cat_df
+    idCol = Window.orderBy("Category")
+    new_cat_df = df.select(["Category"]).distinct()
+
+    try:
+        cat_df = spark.read.parquet(output_data+config["DL_TABLES"]["APP_CATEGORY_TBL"])
+        cat_max = cat_df.agg(fn.max("Category_Id").alias("max_Id"))
+        result = cat_df.join(new_cat_df,cat_df.Category_Desc == new_cat_df.Category,"left")\
+            .crossJoin(cat_max)
+        result = result.filter(result.Category_Desc.isNull()).withColumn("Id",fn.row_number().over(idCol))\
+            .select(["Id","Category","max_Id"])
+        result = result.withColumn("Category_Id",result.Id+result.max_Id)\
+            .withColumnRenamed("Category","Category_Desc").select(["Category_Id","Category_Desc"])
+
+        new_cat_df = cat_df.unionAll(result)
+
+
+
+    except Exception as e:
+        print(e)
+        new_cat_df = df.select(["Category"]).distinct()\
+            .withColumn("Category_Id",fn.row_number().over(idCol))\
+            .withColumnRenamed("Category","Category_Desc")
+
+
+    return new_cat_df
 
 
 def process_google_perm_data(spark, input_data, output_data):
