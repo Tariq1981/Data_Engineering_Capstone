@@ -318,19 +318,33 @@ def process_google_perm_data(spark, df_app, input_data, output_data):
     """
 
     # Read json file create lookup using thte generic function then use_df_app in creating the relation app and permission
-    schema = StructType([StructField("appId",StringType()),
-                         StructField("appName",StringType()),
-                         StructField("allPermissions",ArrayType(
+    df = readGoogleJsonFile(spark,input_data)
+    df.printSchema()
+    df.show(truncate=False)
+
+    # Create Permisison Type lookup
+    df_permType = getLookupTable(spark, df, "type", "Permission_Type_Id", "Permission_Type_Desc", output_data,
+                            config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
+    df_permType.cache()
+    df_permType.show(n=10)
+    df_permType.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
+
+
+def readGoogleJsonFile(spark,input_data):
+    schema = StructType([StructField("appId", StringType()),
+                         StructField("appName", StringType()),
+                         StructField("allPermissions", ArrayType(
                              StructType([
-                                 StructField("permission",StringType()),
-                                 StructField("type",StringType())
+                                 StructField("permission", StringType()),
+                                 StructField("type", StringType())
                              ])
                          ))])
     permission_file = input_data + config['S3']['GOOGLE_PERM_DATA']
     df = spark.read.schema(schema).option("multiline", "true").json(permission_file)
-    df.printSchema()
-    df.show(truncate=False)
-
+    df = df.withColumn("permissionSt",fn.explode("allPermissions"))
+    df = df.withColumn("permisison",df["permissionSt"]["permission"]) \
+        .withColumn("type",df["permissionSt"]["type"]).drop("allPermissions","permissionSt")
+    return df
 
 def main():
     spark = create_spark_session()
