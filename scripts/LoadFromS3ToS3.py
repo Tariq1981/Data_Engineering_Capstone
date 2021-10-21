@@ -60,31 +60,28 @@ def process_google_apps_data(spark, input_data, output_data):
 
     # Create Developer Table
     df_dev = getDeveloperTable(spark,df,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
-    df_dev.cache()
-    df_dev.show()
-    df_dev.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["DEVELOPER_TBL"])
+    df_dev.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["DEVELOPER_TBL"]+"_TEMP")
+    replaceTable(spark,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
 
     # Create App_Category Table
     df_cat = getLookupTable(spark, df, "Category", "Category_Id", "Category_Desc", output_data,
                             config["DL_TABLES"]["APP_CATEGORY_TBL"])
-    df_cat.cache()
-    df_cat.show(n=1)
-    df_cat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_CATEGORY_TBL"])
+    df_cat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_CATEGORY_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["APP_CATEGORY_TBL"])
 
     # Create Content_Rating Table
     df_cntRat = getLookupTable(spark, df, "Content_Rating", "Cont_Rating_Id", "Cont_Rating_Desc", output_data,
                                config["DL_TABLES"]["CONTENT_RATING_TBL"])
-    df_cntRat.cache()
-    df_cntRat.show(n=1)
-    df_cntRat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CONTENT_RATING_TBL"])
+    df_cntRat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CONTENT_RATING_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["CONTENT_RATING_TBL"])
 
     # Create CURRENCY_TYPE Table
     df_curr = getLookupTable(spark, df, "Currency", "Currency_Type_Id", "Currency_Type_Desc", output_data,
                              config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
-    df_curr.cache()
-    df_curr.show(n=100)
-    df_curr.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
+    df_curr.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CURRENCY_TYPE_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
 
+    #Create APP Table
     df_app = getAppTable(spark,df,df_cat,df_cntRat,df_curr,df_dev,output_data,config["DL_TABLES"]["APP_TBL"])
     df_app.cache()
     df_app.show(truncate=False,n=1)
@@ -325,13 +322,14 @@ def process_google_perm_data(spark, input_data, output_data):
     # Create Permisison Type lookup
     df_permType = getLookupTable(spark, df, "type", "Permission_Type_Id", "Permission_Type_Desc", output_data,
                             config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
-    #df_permType.cache()
+    df_permType.cache()
     #df_permType.show(n=10)
     df_permType.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TYPE_TBL"]+"_TEMP")
     replaceTable(spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
 
     # Create Permission Table lookup
     df_perm = getPermisisonTable(spark,df,df_permType,output_data,config["DL_TABLES"]["PERMISSION_TBL"])
+    df_perm.cache()
     df_perm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
 
@@ -362,7 +360,7 @@ def getPermisisonTable(spark,df,df_permType,output_data,tblName):
     df.createOrReplaceTempView("DF_SRC")
     df_permType.createOrReplaceTempView("DF_PERMTYPE")
     df_perm_new = spark.sql("""
-            SELECT ROW_NUMBER() OVER(ORDER BY permission) Permission_Id,permission Permisison_Desc,
+            SELECT /*+ BROADCASTJOIN(DF_PERMTYPE) */ ROW_NUMBER() OVER(ORDER BY permission) Permission_Id,permission Permisison_Desc,
                     COALESCE(Permission_Type_Id,-1) Permission_Type_Id
             FROM 
             (
@@ -432,7 +430,7 @@ def main():
         input_data = config['S3']['SOURCE_BUCKET']
         output_data = config['S3']['TARGET_BUCKET']
 
-    #process_google_apps_data(spark, input_data, output_data)
+    process_google_apps_data(spark, input_data, output_data)
     process_google_perm_data(spark,input_data, output_data)
 
 
