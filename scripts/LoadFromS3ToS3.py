@@ -90,7 +90,7 @@ def process_google_apps_data(spark, input_data, output_data):
     df_app.show(truncate=False,n=1)
     df_app.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_TBL"])
 
-    return df_app
+
 
 def readGoogleAppFile(spark,input_data):
     """
@@ -304,7 +304,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
     return new_lookup_df
 
 
-def process_google_perm_data(spark, df_app, input_data, output_data):
+def process_google_perm_data(spark, input_data, output_data):
     """
         Description: This funciton processes the songs files on S3 and populate SONGS and ARTISTS folders
 
@@ -325,9 +325,72 @@ def process_google_perm_data(spark, df_app, input_data, output_data):
     # Create Permisison Type lookup
     df_permType = getLookupTable(spark, df, "type", "Permission_Type_Id", "Permission_Type_Desc", output_data,
                             config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
-    df_permType.cache()
-    df_permType.show(n=10)
-    df_permType.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
+    #df_permType.cache()
+    #df_permType.show(n=10)
+    df_permType.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TYPE_TBL"]+"_TEMP")
+    replaceTable(spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
+
+    # Create Permission Table lookup
+    df_perm = getPermisisonTable(spark,df,df_permType,output_data,config["DL_TABLES"]["PERMISSION_TBL"])
+    df_perm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
+
+    #Create APP_PERMISSION Table
+    df_appPerm = getAppPermissionTable(spark,df,df_perm,output_data,config["DL_TABLES"]["APP_PERMISSION_TBL"])
+    df_appPerm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_PERMISSION_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["APP_PERMISSION_TBL"])
+
+
+def getAppPermissionTable(spark,df,df_perm,output_data,tblName):
+    df.createOrReplaceTempView("SrcAppPermTable")
+    df_perm.createOrReplaceTempView("PermTable")
+    df_new_appPerm = spark.sql("""
+            SELECT SRC.appId,COALESCE(PT.Permission_Id,-1) Permission_Id
+            FROM SrcAppPermTable SRC
+            LEFT OUTER JOIN PermTable PT
+            ON SRC.permission = PT.Permisison_Desc
+    """)
+    try:
+        df_appPerm = spark.read.parquet(output_data + tblName)
+        df_new_appPerm = df_appPerm.union(df_new_appPerm)
+    except Exception as e:
+        print(e)
+
+    return df_new_appPerm
+
+def getPermisisonTable(spark,df,df_permType,output_data,tblName):
+    df.createOrReplaceTempView("DF_SRC")
+    df_permType.createOrReplaceTempView("DF_PERMTYPE")
+    df_perm_new = spark.sql("""
+            SELECT ROW_NUMBER() OVER(ORDER BY permission) Permission_Id,permission Permisison_Desc,
+                    COALESCE(Permission_Type_Id,-1) Permission_Type_Id
+            FROM 
+            (
+                SELECT permission,type 
+                FROM DF_SRC
+                GROUP BY permission,type
+            ) X
+            LEFT OUTER JOIN DF_PERMTYPE PT
+            ON PT.Permission_Type_Desc = X.type
+            """)
+    try:
+        df_perm = spark.read.parquet(output_data + tblName)
+        df_perm_new.createOrReplaceTempView("DF_NEW_PERM")
+        df_perm.createOrReplaceTempView("DF_TGT_PERM")
+        df_perm_new = spark.sql("""
+                SELECT SRC.Permission_Id + max_Id Permission_Id, SRC.Permisison_Desc, SRC.Permission_Type_Id
+                FROM DF_NEW_PERM SRC
+                CROSS JOIN 
+                (
+                    SELECT max(Permission_Id) max_ID
+                    FROM DF_TGT_PERM
+                )
+        """)
+    except Exception as e:
+        print(e)
+
+
+    return df_perm_new
 
 
 def readGoogleJsonFile(spark,input_data):
@@ -342,9 +405,23 @@ def readGoogleJsonFile(spark,input_data):
     permission_file = input_data + config['S3']['GOOGLE_PERM_DATA']
     df = spark.read.schema(schema).option("multiline", "true").json(permission_file)
     df = df.withColumn("permissionSt",fn.explode("allPermissions"))
-    df = df.withColumn("permisison",df["permissionSt"]["permission"]) \
+    df = df.withColumn("permission",df["permissionSt"]["permission"]) \
         .withColumn("type",df["permissionSt"]["type"]).drop("allPermissions","permissionSt")
     return df
+
+def replaceTable(spark,output_data,tblName):
+    fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
+    # list files in the directory
+    list_status = fs.listStatus(spark._jvm.org.apache.hadoop.fs.Path(output_data))
+    for file in list_status:
+        fileName = file.getPath().getName()
+        print(fileName)
+        if fileName == tblName:
+            print("Got it !!!!!!")
+            fs.delete(spark._jvm.org.apache.hadoop.fs.Path(output_data + fileName), True)
+            fs.rename(spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName + "_TEMP"),
+                      spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName))
+            break
 
 def main():
     spark = create_spark_session()
@@ -355,8 +432,8 @@ def main():
         input_data = config['S3']['SOURCE_BUCKET']
         output_data = config['S3']['TARGET_BUCKET']
 
-    #df_app = process_google_apps_data(spark, input_data, output_data)
-    process_google_perm_data(spark,None, input_data, output_data)
+    #process_google_apps_data(spark, input_data, output_data)
+    process_google_perm_data(spark,input_data, output_data)
 
 
 if __name__ == "__main__":
