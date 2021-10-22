@@ -82,10 +82,11 @@ def process_google_apps_data(spark, input_data, output_data):
     replaceTable(spark, output_data, config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
 
     #Create APP Table
-    df_app = getAppTable(spark,df,df_cat,df_cntRat,df_curr,df_dev,output_data,config["DL_TABLES"]["APP_TBL"])
-    df_app.cache()
-    df_app.show(truncate=False,n=1)
-    df_app.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_TBL"])
+    df_app = getAppTable(spark,df,config["DL_TABLES"]["APP_CATEGORY_TBL"],config["DL_TABLES"]["CONTENT_RATING_TBL"],
+                         config["DL_TABLES"]["CURRENCY_TYPE_TBL"],config["DL_TABLES"]["DEVELOPER_TBL"],
+                         output_data,config["DL_TABLES"]["APP_TBL"])
+    df_app.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_TBL"]+"_TEMP")
+    replaceTable(spark, output_data, config["DL_TABLES"]["APP_TBL"])
 
 
 
@@ -119,7 +120,7 @@ def readGoogleAppFile(spark,input_data):
     return df
 
 
-def getAppTable(spark,df,df_cat,df_cont,df_curr,df_dev,output_data,tblName):
+def getAppTable(spark,df,catTableName,contTableName,curTableName,devTableName,output_data,tblName):
     """
 
     :param spark:
@@ -129,13 +130,19 @@ def getAppTable(spark,df,df_cat,df_cont,df_curr,df_dev,output_data,tblName):
     :return:
     """
     try:
-        new_app_df = df.join(df_cat,df["Category"] == df_cat["Category_Desc"],"left")
+        #Read Lookup tables
+        df_cat = spark.read.parquet(output_data + catTableName)
+        df_cont = spark.read.parquet(output_data + contTableName)
+        df_curr = spark.read.parquet(output_data + curTableName)
+        df_dev = spark.read.parquet(output_data + devTableName)
+
+        new_app_df = df.join(fn.broadcast(df_cat),df["Category"] == df_cat["Category_Desc"],"left")
         new_app_df = new_app_df.withColumn("Category_Id",fn.coalesce(new_app_df["Category_Id"],fn.lit(-1)))
 
-        new_app_df = new_app_df.join(df_cont, new_app_df["Content_Rating"] == df_cont["Cont_Rating_Desc"], "left")
+        new_app_df = new_app_df.join(fn.broadcast(df_cont), new_app_df["Content_Rating"] == df_cont["Cont_Rating_Desc"], "left")
         new_app_df = new_app_df.withColumn("Cont_Rating_Id", fn.coalesce(new_app_df["Cont_Rating_Id"], fn.lit(-1)))
 
-        new_app_df = new_app_df.join(df_curr, new_app_df["Currency"] == df_curr["Currency_Type_Desc"], "left")
+        new_app_df = new_app_df.join(fn.broadcast(df_curr), new_app_df["Currency"] == df_curr["Currency_Type_Desc"], "left")
         new_app_df = new_app_df.withColumn("Currency_Type_Id", fn.coalesce(new_app_df["Currency_Type_Id"], fn.lit(-1)))
 
         new_app_df = new_app_df.withColumnRenamed("Developer_Id","Src_Developer_Name")
@@ -417,9 +424,9 @@ def replaceTable(spark,output_data,tblName):
         if fileName == tblName:
             print("Got it !!!!!!")
             fs.delete(spark._jvm.org.apache.hadoop.fs.Path(output_data + fileName), True)
-            fs.rename(spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName + "_TEMP"),
-                      spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName))
             break
+    fs.rename(spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName + "_TEMP"),
+              spark._jvm.org.apache.hadoop.fs.Path(output_data + tblName))
 
 def main():
     spark = create_spark_session()
