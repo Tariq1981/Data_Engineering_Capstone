@@ -382,7 +382,7 @@ def getAppPermissionTable(spark,df,permTableName,output_data,tblName):
     df.createOrReplaceTempView("SrcAppPermTable")
     df_perm.createOrReplaceTempView("PermTable")
     df_new_appPerm = spark.sql("""
-            SELECT SRC.appId,COALESCE(PT.Permission_Id,-1) Permission_Id
+            SELECT SRC.appId APP_ID,COALESCE(PT.Permission_Id,-1) Permission_Id
             FROM SrcAppPermTable SRC
             LEFT OUTER JOIN PermTable PT
             ON SRC.permission = PT.Permisison_Desc
