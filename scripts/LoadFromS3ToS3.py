@@ -24,7 +24,7 @@ def create_spark_session():
 
     spark = SparkSession \
         .builder \
-        .master("local[1]") \
+        .master("local[2]") \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
         .config("spark.executor.heartbeatInterval","3600s") \
         .config("spark.files.fetchTimeout", "3600s") \
@@ -38,22 +38,16 @@ def create_spark_session():
 
 def process_google_apps_data(spark, input_data, output_data):
     """
-        Description: This funciton processes the songs files on S3 and populate SONGS and ARTISTS folders
+        Description: This function processes the main google app csv file
 
         Arguments:
             spark: spark session object
             input_data: S3 input bucket which has the files.
-            output:data: S3 Output bucket which will be used to save the output folders ( SONGS, ARTISTS)
+            output_data: S3 Output bucket which will be used to save the parquet files for each table
 
         Returns:
             None
     """
-    # schema = "App_Name STRING,App_Id STRING,Category STRING,Rating DOUBLE,Rating_Count INT,Installs STRING," \
-    #          "Minimum_Installs INT,Maximum_Installs INT,Free STRING,Price DOUBLE,Currency STRING,Size STRING," \
-    #          "Minimum_Android STRING,Developer_Id STRING,Developer_Website STRING,Developer_Email STRING," \
-    #          "Released DATE,Last_Updated DATE,Content_Rating STRING,Privacy_Policy STRING,Ad_Supported STRING," \
-    #          "In_App_Purchases STRING,Editors_Choice STRING,Scraped_Time TIMESTAMP"
-
     df = readGoogleAppFile(spark, input_data)
     # df.filter(df["Currency"] == "9126997").show(truncate=False)
     #df.show()
@@ -92,13 +86,17 @@ def process_google_apps_data(spark, input_data, output_data):
 
 def readGoogleAppFile(spark,input_data):
     """
-    Read cateogry and merge with what in te df after getting max ID and increase
+        Description: This function read the google app csv file. It uses noraml text read which read the whole line
+        as one string. This is due to quotes and comma characters are included in the name field.
 
-    :param spark:
-    :param df:
-    :param output_data:
-    :return:
+        Arguments:
+            spark: spark session object
+            input_data: S3 input bucket which has the files.
+
+        Returns:
+            df: Spark DataFrame which contains the data.
     """
+
     pattern = '("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*),("(?:[^"]|"")*"|[^,]*)'
     colNames = ["App_Name","App_Id","Category","Rating","Rating_Count","Installs","Minimum_Installs","Maximum_Installs","Free","Price","Currency","Size","Minimum_Android","Developer_Id","Developer_Website","Developer_Email","Released","Last_Updated","Content_Rating","Privacy_Policy","Ad_Supported","In_App_Purchases","Editors_Choice","Scraped_Time"]
 
@@ -122,13 +120,21 @@ def readGoogleAppFile(spark,input_data):
 
 def getAppTable(spark,df,catTableName,contTableName,curTableName,devTableName,output_data,tblName):
     """
+        Description: This function creates the APP table.
 
-    :param spark:
-    :param df:
-    :param output_data:
-    :param tblName:
-    :return:
+        Arguments:
+            spark: spark session object
+            df: The dataframe which holds the data read from google apps csv file
+            catTableName: The table name for the CATEGORY table
+            contTableName: The table name for the CONTENT_RATING table
+            curTableName: The table name for the CURRENCY table
+            devTableName: The table name for the DEVELOPER table
+            output_data: S3 Output bucket which will be used to save the parquet files for APP table
+            tblName: The table name for the APP table.
+        Returns:
+            new_app_df: Spark DataFrame which contains the data for the APP table.
     """
+
     try:
         #Read Lookup tables
         df_cat = spark.read.parquet(output_data + catTableName)
@@ -136,13 +142,13 @@ def getAppTable(spark,df,catTableName,contTableName,curTableName,devTableName,ou
         df_curr = spark.read.parquet(output_data + curTableName)
         df_dev = spark.read.parquet(output_data + devTableName)
 
-        new_app_df = df.join(fn.broadcast(df_cat),df["Category"] == df_cat["Category_Desc"],"left")
+        new_app_df = df.join(df_cat,df["Category"] == df_cat["Category_Desc"],"left")
         new_app_df = new_app_df.withColumn("Category_Id",fn.coalesce(new_app_df["Category_Id"],fn.lit(-1)))
 
-        new_app_df = new_app_df.join(fn.broadcast(df_cont), new_app_df["Content_Rating"] == df_cont["Cont_Rating_Desc"], "left")
+        new_app_df = new_app_df.join(df_cont, new_app_df["Content_Rating"] == df_cont["Cont_Rating_Desc"], "left")
         new_app_df = new_app_df.withColumn("Cont_Rating_Id", fn.coalesce(new_app_df["Cont_Rating_Id"], fn.lit(-1)))
 
-        new_app_df = new_app_df.join(fn.broadcast(df_curr), new_app_df["Currency"] == df_curr["Currency_Type_Desc"], "left")
+        new_app_df = new_app_df.join(df_curr, new_app_df["Currency"] == df_curr["Currency_Type_Desc"], "left")
         new_app_df = new_app_df.withColumn("Currency_Type_Id", fn.coalesce(new_app_df["Currency_Type_Id"], fn.lit(-1)))
 
         new_app_df = new_app_df.withColumnRenamed("Developer_Id","Src_Developer_Name")
@@ -218,10 +224,15 @@ def getAppTable(spark,df,catTableName,contTableName,curTableName,devTableName,ou
 
 def getDeveloperTable(spark, df,output_data,tblName):
     """
-    :param spark:
-    :param df:
-    :param output_data:
-    :return:
+        Description: This function creates the DEVELOPER table.
+
+        Arguments:
+            spark: spark session object
+            df: The dataframe which holds the data read from google apps csv file
+            output_data: S3 Output bucket which will be used to save the parquet files for DEVELOPER table
+            tblName: The table name for the DEVELOPER table.
+        Returns:
+            new_app_df: Spark DataFrame which contains the data for the DEVELOPER table.
     """
 
 
@@ -278,13 +289,20 @@ def getDeveloperTable(spark, df,output_data,tblName):
 
 def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tblName):
     """
-    Read cateogry and merge with what in te df after getting max ID and increase
+        Description: This function is used to create lookup tables like CATEGORY,...etc.
 
-    :param spark:
-    :param df:
-    :param output_data:
-    :return:
+        Arguments:
+            spark: spark session object
+            df: The dataframe which holds the data read from google apps csv file
+            srcColumn: The source column which will be used in generating Id for each distinct value in the lookup
+            tgtIdColumn: The name of the column which will hold the Id column in the target table
+            tgtColumn: The name of column which will hold the valye from the srcColumn in the target table.
+            output_data: S3 Output bucket which will be used to save the parquet files for DEVELOPER table
+            tblName: The table name for the lookup table.
+        Returns:
+            new_lookup_df: Spark DataFrame which contains the data for the lookup table.
     """
+
     idCol = Window.orderBy(srcColumn)
 
     try:
@@ -310,12 +328,12 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
 
 def process_google_perm_data(spark, input_data, output_data):
     """
-        Description: This funciton processes the songs files on S3 and populate SONGS and ARTISTS folders
+        Description: This funciton processes the google app permission json file
 
         Arguments:
             spark: spark session object
             input_data: S3 input bucket which has the files.
-            output:data: S3 Output bucket which will be used to save the output folders ( SONGS, ARTISTS)
+            output:data: S3 Output bucket which will be used to save the output folders
 
         Returns:
             None
@@ -335,18 +353,32 @@ def process_google_perm_data(spark, input_data, output_data):
     replaceTable(spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
 
     # Create Permission Table lookup
-    df_perm = getPermisisonTable(spark,df,df_permType,output_data,config["DL_TABLES"]["PERMISSION_TBL"])
-    df_perm.cache()
+    df_perm = getPermisisonTable(spark,df,config["DL_TABLES"]["PERMISSION_TYPE_TBL"],
+                                 output_data,config["DL_TABLES"]["PERMISSION_TBL"])
     df_perm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
 
     #Create APP_PERMISSION Table
-    df_appPerm = getAppPermissionTable(spark,df,df_perm,output_data,config["DL_TABLES"]["APP_PERMISSION_TBL"])
+    df_appPerm = getAppPermissionTable(spark,df,config["DL_TABLES"]["PERMISSION_TBL"],output_data,
+                                       config["DL_TABLES"]["APP_PERMISSION_TBL"])
     df_appPerm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_PERMISSION_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["APP_PERMISSION_TBL"])
 
 
-def getAppPermissionTable(spark,df,df_perm,output_data,tblName):
+def getAppPermissionTable(spark,df,permTableName,output_data,tblName):
+    """
+        Description: This function is used to create APP_PERMISSION table.
+
+        Arguments:
+            spark: spark session object
+            df: The dataframe which holds the data read from google apps permissions json file
+            permTableName: Table name for PERMISSION table.
+            output_data: S3 Output bucket which will be used to save the parquet files for APP_PERMISSION table
+            tblName: The table name for the APP_PERMISSION table.
+        Returns:
+            df_new_appPerm: Spark DataFrame which contains the data for the APP_PERMISSION table.
+    """
+    df_perm = spark.read.parquet(output_data + permTableName)
     df.createOrReplaceTempView("SrcAppPermTable")
     df_perm.createOrReplaceTempView("PermTable")
     df_new_appPerm = spark.sql("""
@@ -363,8 +395,22 @@ def getAppPermissionTable(spark,df,df_perm,output_data,tblName):
 
     return df_new_appPerm
 
-def getPermisisonTable(spark,df,df_permType,output_data,tblName):
+def getPermisisonTable(spark,df,permTypeTableName,output_data,tblName):
+    """
+        Description: This function is used to create PERMISSION table.
+
+        Arguments:
+            spark: spark session object
+            df: The dataframe which holds the data read from google apps permissions json file
+            permTypeTableName: Table name for PERMISSION_TYPE table.
+            output_data: S3 Output bucket which will be used to save the parquet files for APP_PERMISSION table
+            tblName: The table name for the PERMISSION table.
+        Returns:
+            df_perm_new: Spark DataFrame which contains the data for the PERMISSION table.
+    """
+
     df.createOrReplaceTempView("DF_SRC")
+    df_permType = spark.read.parquet(output_data + permTypeTableName)
     df_permType.createOrReplaceTempView("DF_PERMTYPE")
     df_perm_new = spark.sql("""
             SELECT /*+ BROADCASTJOIN(DF_PERMTYPE) */ ROW_NUMBER() OVER(ORDER BY permission) Permission_Id,permission Permisison_Desc,
@@ -399,6 +445,17 @@ def getPermisisonTable(spark,df,df_permType,output_data,tblName):
 
 
 def readGoogleJsonFile(spark,input_data):
+    """
+        Description: This function read the google app permission json file.
+
+        Arguments:
+            spark: spark session object
+            input_data: S3 input bucket which has the files.
+
+        Returns:
+            df: Spark DataFrame which contains the data.
+    """
+
     schema = StructType([StructField("appId", StringType()),
                          StructField("appName", StringType()),
                          StructField("allPermissions", ArrayType(
@@ -415,6 +472,18 @@ def readGoogleJsonFile(spark,input_data):
     return df
 
 def replaceTable(spark,output_data,tblName):
+    """
+        Description: This function is used to replace the old data with new one.
+
+        Arguments:
+            spark: spark session object
+            output_data: S3 Output bucket which will be used
+            tblName: The table name tobe replaced.
+
+        Returns:
+            None
+    """
+
     fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(spark._jsc.hadoopConfiguration())
     # list files in the directory
     list_status = fs.listStatus(spark._jvm.org.apache.hadoop.fs.Path(output_data))
