@@ -75,12 +75,18 @@ def createAppFactTabe(spark,input_data):
 
     df_agg = spark.sql("""
         SELECT Category_Id,Currency_Type_Id,Developer_Id,EXTRACT(YEAR FROM Release_Dt) YEAR, 
-               EXTRACT(MONTH FROM Release_Dt) MONTH,Cont_Rating_Id,Permission_Type_Id
+               EXTRACT(MONTH FROM Release_Dt) MONTH,Cont_Rating_Id,Permission_Type_Id,
+               COUNT(DISTINCT AP_PER.Permission_Id) Total_Num_Permissions,COUNT(DISTINCT AP.App_Id) Count_Of_Apps,
+               SUM(AP.Rating)/COUNT(DISTINCT AP.App_Id) Average_Rating,SUM(Rating_Num) Total_Rating_Num,
+               SUM(Maximum_Installs) Total_Installs,COUNT(DISTINCT CASE WHEN Is_Free = 'Y' THEN AP.APP_ID END) Count_Of_Free.
+               COUNT(DISTINCT CASE WHEN Is_Free = 'N' THEN AP.APP_ID END) Count_Of_Paid
         FROM APP AP
         INNER JOIN APP_PERMISSION AP_PER
         ON AP.APP_ID = AP_PER.APP_ID
         INNER JOIN PERMISSION PER
         ON AP_PER.Permission_Id = PER.Permission_Id
+        GROuP BY Category_Id,Currency_Type_Id,Developer_Id,EXTRACT(YEAR FROM Release_Dt),EXTRACT(MONTH FROM Release_Dt),
+                 Cont_Rating_Id,Permission_Type_Id
     """)
 
     return df_agg
