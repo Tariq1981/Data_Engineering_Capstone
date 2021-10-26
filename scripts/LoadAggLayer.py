@@ -78,8 +78,12 @@ def createAppFactTabe(spark,input_data):
                EXTRACT(MONTH FROM Release_Dt) MONTH,Cont_Rating_Id,Permission_Type_Id,
                COUNT(DISTINCT AP_PER.Permission_Id) Total_Num_Permissions,COUNT(DISTINCT AP.App_Id) Count_Of_Apps,
                SUM(AP.Rating)/COUNT(DISTINCT AP.App_Id) Average_Rating,SUM(Rating_Num) Total_Rating_Num,
-               SUM(Maximum_Installs) Total_Installs,COUNT(DISTINCT CASE WHEN Is_Free = 'Y' THEN AP.APP_ID END) Count_Of_Free.
-               COUNT(DISTINCT CASE WHEN Is_Free = 'N' THEN AP.APP_ID END) Count_Of_Paid
+               SUM(Maximum_Installs) Total_Installs,COUNT(DISTINCT CASE WHEN Is_Free = 'Y' THEN AP.APP_ID END) Count_Of_Free,
+               COUNT(DISTINCT CASE WHEN Is_Free = 'N' THEN AP.APP_ID END) Count_Of_Paid,
+               SUM(AP.Price) Total_Price,SUM(Size_In_MB) Total_Size_In_MB,
+               COUNT(DISTINCT CASE WHEN Is_Ad_Supported = 'Y' THEN AP.APP_ID END) Count_Ad_Supported,
+               COUNT(DISTINCT CASE WHEN Is_In_App_Purchase = 'Y' THEN AP.APP_ID END) Count_In_App_Purchase,
+               COUNT(DISTINCT CASE WHEN Is_Editor_Choice = 'Y' THEN AP.APP_ID END) Count_Of_Editor_Choice
         FROM APP AP
         INNER JOIN APP_PERMISSION AP_PER
         ON AP.APP_ID = AP_PER.APP_ID
