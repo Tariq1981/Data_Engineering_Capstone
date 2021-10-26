@@ -1,39 +1,13 @@
 import configparser
 import os
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StringType, ArrayType , StructType,StructField
-from pyspark.sql.window import Window
-import pyspark.sql.functions as fn
+from Utitlity import replaceTable
+from Utitlity import create_spark_session
 
 config = configparser.ConfigParser()
 config.read('../config/etl.cfg')
 
 os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
 os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
-
-
-def create_spark_session():
-    """
-        Description: This function creates the spark session which will be used in teh rest of the script.
-
-        Arguments:
-            None
-        Returns:
-            None
-    """
-
-    spark = SparkSession \
-        .builder \
-        .master("local[2]") \
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
-        .config("spark.executor.heartbeatInterval","3600s") \
-        .config("spark.files.fetchTimeout", "3600s") \
-        .config("spark.network.timeout", "4600s") \
-        .config("spark.storage.blockManagerSlaveTimeoutMs","3600s") \
-        .getOrCreate()
-
-
-    return spark
 
 
 def createAggTables(spark, input_data, output_data):
@@ -49,8 +23,8 @@ def createAggTables(spark, input_data, output_data):
             None
     """
     df_app_fact = createAppFactTabe(spark,input_data)
-
-    df_app_fact.show(truncate=False)
+    df_app_fact.write.mode("overwrite").parquet(output_data + config["DWH_TABLES"]["APP_FACT_FT"] + "_TEMP")
+    replaceTable(spark, output_data, config["DWH_TABLES"]["APP_FACT_FT"])
 
 def createAppFactTabe(spark,input_data):
     """
