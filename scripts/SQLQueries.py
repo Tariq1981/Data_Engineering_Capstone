@@ -44,4 +44,37 @@ CREATE TABLE {} IF NOT EXISTS
 	Category_Desc VARCHAR(300),
 	primary key(Category_Id)
 );
-""").format(config["DWH_TABLES"]["APP_CATEGORY_DIM"])
+""").format(config["DWH_TABLES"]["APP_CATEGORY_DM"])
+
+create_currency_type_table = ("""
+SET SEARCH_PATH TO MODEL;
+CREATE TABLE {} IF NOT EXISTS 
+(
+	Currency_Type_Id INTEGER,
+	Currency_Type_Desc VARCHAR(10),
+	primary key(Currency_Type_Id)
+);
+""").format(config["DWH_TABLES"]["CURRENCY_TYPE_DM"])
+
+create_developer_table = ("""
+SET SEARCH_PATH TO MODEL;
+CREATE TABLE {} IF NOT EXISTS 
+(
+	Developer_Id INTEGER,
+	Developer_Name VARCHAR(300),
+	Developer_Website VARCHAR(300),
+	Developer_Email VARCHAR(200),
+	primary key (Developer_Id)
+);
+""").format(config["DWH_TABLES"]["DEVELOPER_DM"])
+
+create_content_rating_table = ("""
+SET SEARCH_PATH TO MODEL;
+CREATE TABLE {} IF NOT EXISTS 
+(
+	Cont_Rating_Id INTEGER,
+	Cont_Rating_Desc VARCHAR(200),
+	primary key(Cont_Rating_Id)
+);
+""").format(config["DWH_TABLES"]["CONTENT_RATING_DM"])
+
