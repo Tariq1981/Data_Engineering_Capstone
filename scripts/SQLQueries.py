@@ -78,3 +78,12 @@ CREATE TABLE {} IF NOT EXISTS
 );
 """).format(config["DWH_TABLES"]["CONTENT_RATING_DM"])
 
+create_permission_type_table = ("""
+SET SEARCH_PATH TO MODEL;
+CREATE TABLE {} IF NOT EXISTS 
+(
+	Permission_Type_Id INTEGER,
+	Permission_Type_Desc VARCHAR(300),
+	primary key(Permission_Type_Id)
+);
+""").format(config["DWH_TABLES"]["PERMISSION_TYPE_DM"])
