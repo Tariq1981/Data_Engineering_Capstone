@@ -20,21 +20,26 @@ def createTables(conn,cur):
         cur.execute(query)
         conn.commit()
 
-def purgeTable(conn,cur,tblName):
+def purgeTables(conn,cur):
     for tblName in config["DWH_TABLES"].keys():
         query = delete_table_sql.format(config["DWH_TABLES"][tblName])
         cur.execute(query)
         conn.commit()
 
+def copyTables(conn,cur):
+    for i in range(0,len(src_dl_tables_list)):
+        query = copy_table_sql.format(trgt_dw_tables_list[i],config["S3"]["TARGET_BUCKET"],
+                                      src_dl_tables_list[i],config["S3"]["IAM_ROLE"])
+        cur.execute(query)
+        conn.commit()
+
+
 def main():
     conn,cur = createConCurObjects()
     createSchema(conn,cur)
     createTables(conn,cur)
-    purgeTable(conn,cur)
-
-    load_staging_tables(cur, conn)
-    insert_tables(cur, conn)
-
+    purgeTables(conn,cur)
+    copyTables(conn,cur)
     conn.close()
 
 

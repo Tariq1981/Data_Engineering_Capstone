@@ -8,6 +8,16 @@ SET SEARCH_PATH TO MODEL;
 TRUNCATE {};
 """
 
+copy_table_sql = """
+SET SEARCH_PATH TO MODEL;
+COPY {} FROM 's3://{}{}' 
+IAM_ROLE '{}'
+FORMAT AS PARQUET
+COMPUPDATE OFF
+STATUPDATE OFF
+;
+"""
+
 create_app_fact_table = ("""
 SET SEARCH_PATH TO MODEL;
 CREATE TABLE {} IF NOT EXISTS 
@@ -90,3 +100,11 @@ CREATE TABLE {} IF NOT EXISTS
 
 create_tables_list = [create_app_fact_table,create_app_category_table,create_currency_type_table,create_developer_table,
                       create_content_rating_table,create_permission_type_table]
+
+src_dl_tables_list = [config["DL_TABLES"]["APP_CATEGORY_TBL"],config["DL_TABLES"]["CONTENT_RATING_TBL"],
+                      config["DL_TABLES"]["DEVELOPER_TBL"],config["DL_TABLES"]["CURRENCY_TYPE_TBL"],
+                      config["DL_TABLES"]["PERMISSION_TYPE_TBL"],config["DWH_TABLES"]["APP_FACT_FT"]]
+
+trgt_dw_tables_list = [config["DWH_TABLES"]["APP_CATEGORY_DM"],config["DWH_TABLES"]["CONTENT_RATING_DM"],
+                      config["DWH_TABLES"]["DEVELOPER_DM"],config["DWH_TABLES"]["CURRENCY_TYPE_DM"],
+                      config["DWH_TABLES"]["PERMISSION_TYPE_DM"],config["DWH_TABLES"]["APP_FACT_FT"]]
