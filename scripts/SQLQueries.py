@@ -2,10 +2,10 @@ import configparser
 config = configparser.ConfigParser()
 config.read('../config/etl.cfg')
 
-create_schema = "CREATE SCHEMA IF NOT EXISTS MODEL;"
-drop_table_sql = """
+create_schema = ("CREATE SCHEMA IF NOT EXISTS {};").format(config["DWH_SCHEMA"]["MODEL_SCH"])
+delete_table_sql = """
 SET SEARCH_PATH TO MODEL;
-DROP TABLE IF EXISTS {};
+TRUNCATE {};
 """
 
 create_app_fact_table = ("""
@@ -87,3 +87,6 @@ CREATE TABLE {} IF NOT EXISTS
 	primary key(Permission_Type_Id)
 );
 """).format(config["DWH_TABLES"]["PERMISSION_TYPE_DM"])
+
+create_tables_list = [create_app_fact_table,create_app_category_table,create_currency_type_table,create_developer_table,
+                      create_content_rating_table,create_permission_type_table]
