@@ -7,6 +7,16 @@ config.read('../config/etl.cfg')
 
 
 def createConCurObjects():
+    """
+        Description: This function creates the connection and cursor objects
+
+        Arguments:
+            None
+
+        Returns:
+            conn: The connection object
+            cur: The cursor object
+    """
     conn = psycopg2.connect("host={} dbname={} user={} password={} port={}".format(*config['REDSHIFT'].values()))
     cur = conn.cursor()
     return (conn,cur)
