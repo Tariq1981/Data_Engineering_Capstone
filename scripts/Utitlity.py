@@ -8,7 +8,7 @@ def create_spark_session():
         Arguments:
             None
         Returns:
-            None
+            spark: SparkSession object
     """
 
     spark = SparkSession \
