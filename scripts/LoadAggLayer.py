@@ -77,8 +77,8 @@ def main():
         input_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
         output_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
     else:
-        input_data = config['S3']['TARGET_BUCKET']
-        output_data = config['S3']['TARGET_BUCKET']
+        input_data = "s3a://"+config['S3']['TARGET_BUCKET']+"/"
+        output_data = "s3a://"+config['S3']['TARGET_BUCKET']+"/"
 
     createAggTables(spark,input_data,output_data)
 
