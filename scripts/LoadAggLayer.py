@@ -12,32 +12,33 @@ os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
 
 def createAggTables(spark, input_data, output_data):
     """
-        Description: This function processes the main google app csv file
+        Description: This function call the functions which create the aggregate tables.
 
         Arguments:
             spark: spark session object
-            input_data: S3 input bucket which has the files.
-            output_data: S3 Output bucket which will be used to save the parquet files for each table
+            input_data: S3 Input bucket which will be used
+            output_data: S3 Output bucket which will be used
 
         Returns:
             None
     """
+
     df_app_fact = createAppFactTabe(spark,input_data)
     df_app_fact.write.mode("overwrite").parquet(output_data + config["DWH_TABLES"]["APP_FACT_FT"] + "_TEMP")
     replaceTable(spark, output_data, config["DWH_TABLES"]["APP_FACT_FT"])
 
 def createAppFactTabe(spark,input_data):
     """
-        Description: This function processes the main google app csv file
+        Description: This function create the APP_FACT table
 
         Arguments:
             spark: spark session object
-            input_data: S3 input bucket which has the files.
-            output_data: S3 Output bucket which will be used to save the parquet files for each table
+            input_data: S3 Input bucket which will be used
 
         Returns:
-            None
+            df_agg: The app aggregate dataframe
     """
+
     spark = create_spark_session()
     df_app = spark.read.parquet(input_data + config['DL_TABLES']['APP_TBL'])
     df_appPerm = spark.read.parquet(input_data + config['DL_TABLES']['APP_PERMISSION_TBL'])
