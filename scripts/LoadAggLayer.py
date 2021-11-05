@@ -22,9 +22,14 @@ def createAggTables(spark, input_data, output_data):
         Returns:
             None
     """
-
-    df_app_fact = createAppFactTabe(spark,input_data)
-    df_app_fact.write.mode("overwrite").parquet(output_data + config["DWH_TABLES"]["APP_FACT_FT"] + "_TEMP")
+    if config["GENERAL"]["DEBUG"] == "1":
+        in_data_full = input_data
+        out_data_full = output_data
+    else:
+        in_data_full = "s3a://" + input_data + "/"
+        out_data_full = "s3a://" + output_data + "/"
+    df_app_fact = createAppFactTabe(spark,in_data_full)
+    df_app_fact.write.mode("overwrite").parquet(out_data_full + config["DWH_TABLES"]["APP_FACT_FT"] + "_TEMP")
     replaceTable(spark, output_data, config["DWH_TABLES"]["APP_FACT_FT"])
 
 def createAppFactTabe(spark,input_data):
@@ -77,8 +82,8 @@ def main():
         input_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
         output_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
     else:
-        input_data = "s3a://"+config['S3']['TARGET_BUCKET']+"/"
-        output_data = "s3a://"+config['S3']['TARGET_BUCKET']+"/"
+        input_data = config['S3']['TARGET_BUCKET']
+        output_data = config['S3']['TARGET_BUCKET']
 
     createAggTables(spark,input_data,output_data)
 

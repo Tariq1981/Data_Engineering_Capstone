@@ -13,7 +13,6 @@ config.read('../config/etl.cfg')
 os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
 os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
 
-
 def process_google_apps_data(spark, input_data, output_data):
     """
         Description: This function processes the main google app csv file
@@ -26,39 +25,47 @@ def process_google_apps_data(spark, input_data, output_data):
         Returns:
             None
     """
-    df = readGoogleAppFile(spark, input_data)
+    if config["GENERAL"]["DEBUG"] == "1":
+        in_data_full = input_data
+        out_data_full = output_data
+    else:
+        in_data_full = "s3a://" + input_data + "/"
+        out_data_full = "s3a://" + output_data + "/"
+
+    df = readGoogleAppFile(spark, in_data_full)
     # df.filter(df["Currency"] == "9126997").show(truncate=False)
     #df.show()
 
     # Create Developer Table
-    df_dev = getDeveloperTable(spark,df,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
-    df_dev.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["DEVELOPER_TBL"]+"_TEMP")
+    df_dev = getDeveloperTable(spark,df,out_data_full,config["DL_TABLES"]["DEVELOPER_TBL"])
+    df_dev.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["DEVELOPER_TBL"]+"_TEMP")
     replaceTable(spark,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
 
     # Create App_Category Table
-    df_cat = getLookupTable(spark, df, "Category", "Category_Id", "Category_Desc", output_data,
+    df_cat = getLookupTable(spark, df, "Category", "Category_Id", "Category_Desc", out_data_full,
                             config["DL_TABLES"]["APP_CATEGORY_TBL"])
-    df_cat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_CATEGORY_TBL"]+"_TEMP")
+    df_cat.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_CATEGORY_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["APP_CATEGORY_TBL"])
 
     # Create Content_Rating Table
-    df_cntRat = getLookupTable(spark, df, "Content_Rating", "Cont_Rating_Id", "Cont_Rating_Desc", output_data,
+    df_cntRat = getLookupTable(spark, df, "Content_Rating", "Cont_Rating_Id", "Cont_Rating_Desc", out_data_full,
                                config["DL_TABLES"]["CONTENT_RATING_TBL"])
-    df_cntRat.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CONTENT_RATING_TBL"]+"_TEMP")
+    df_cntRat.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["CONTENT_RATING_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["CONTENT_RATING_TBL"])
 
     # Create CURRENCY_TYPE Table
-    df_curr = getLookupTable(spark, df, "Currency", "Currency_Type_Id", "Currency_Type_Desc", output_data,
+    df_curr = getLookupTable(spark, df, "Currency", "Currency_Type_Id", "Currency_Type_Desc", out_data_full,
                              config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
-    df_curr.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["CURRENCY_TYPE_TBL"]+"_TEMP")
+    df_curr.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["CURRENCY_TYPE_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
 
     #Create APP Table
     df_app = getAppTable(spark,df,config["DL_TABLES"]["APP_CATEGORY_TBL"],config["DL_TABLES"]["CONTENT_RATING_TBL"],
                          config["DL_TABLES"]["CURRENCY_TYPE_TBL"],config["DL_TABLES"]["DEVELOPER_TBL"],
-                         output_data,config["DL_TABLES"]["APP_TBL"])
-    df_app.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_TBL"]+"_TEMP")
+                         out_data_full,config["DL_TABLES"]["APP_TBL"])
+    df_app.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["APP_TBL"])
+    #df_app.show(truncate=False)
 
 
 
@@ -89,6 +96,7 @@ def readGoogleAppFile(spark,input_data):
         df = df.withColumn(colNames[i],fn.regexp_extract(df["value"],pattern,i+1))
         df = df.withColumn(colNames[i],udfStrip(df[colNames[i]]))
 
+    #df.show(truncate=False)
     df = df.withColumn("Released",fn.to_date(df["Released"], "MMM d, yyyy"))
     df = df.withColumn("Last_Updated",fn.to_date(df["Last_Updated"], "MMM d, yyyy"))
     df = df.withColumn("Scraped_Time",fn.to_timestamp("Scraped_Time", "yyyy-MM-dd HH:mm:ss"))
@@ -161,37 +169,39 @@ def getAppTable(spark,df,catTableName,contTableName,curTableName,devTableName,ou
              "Developer_Id", "Release_Dt", "Last_Update_Dt", "Cont_Rating_Id", "Privacy_Policy",
              "Is_Ad_Supported", "Is_In_App_Purchase", "Is_Editor_Choice", "Scrapped_Dttm"])
 
-        app_df = spark.read.parquet(output_data + tblName)
 
-        new_app_df.createOrReplaceTempView("APP_DF_SRC")
-        app_df.createOrReplaceTempView("APP_DF_TGT")
-        new_app_df_Ins_Upd = spark.sql("""
-        SELECT SRC.*
-        FROM APP_DF_SRC SRC
-        LEFT OUTER JOIN APP_DF_TGT TGT
-        ON SRC.App_ID = TGT.App_ID
-        WHERE (TGT.App_ID IS NULL) OR (TGT.App_ID IS NOT NULL AND 
-               (TGT.App_Name <> SRC.App_Name OR TGT.Rating <> SRC.Rating OR TGT.Rating_Num <> SRC.Rating_Num OR 
-                TGT.Minimum_Installs <> SRC.Minimum_Installs OR TGT.Maximum_Installs <> SRC.Maximum_Installs OR 
-                TGT.Is_Free <> SRC.Is_Free OR TGT.Price <> SRC.Price OR TGT.Currency_Type_Id <> SRC.Currency_Type_Id OR
-                COALESCE(TGT.Size_In_MB,-1) <> COALESCE(SRC.Size_In_MB,-1) OR TGT.Supp_OS_Version <> SRC.Supp_OS_Version OR 
-                TGT.Developer_Id <> SRC.Developer_Id OR TGT.Last_Update_Dt <> SRC.Last_Update_Dt OR 
-                TGT.Cont_Rating_Id <> SRC.Cont_Rating_Id OR TGT.Privacy_Policy <> SRC.Privacy_Policy OR 
-                TGT.Is_Ad_Supported <> SRC.Is_Ad_Supported OR TGT.Is_In_App_Purchase <> SRC.Is_In_App_Purchase OR
-                TGT.Is_Editor_Choice <> SRC.Is_Editor_Choice
-                ))
-        """)
-        new_app_df_Ins_Upd.createOrReplaceTempView("APP_NEW_UPDATE")
 
-        new_app_df_rest = spark.sql("""
-        SELECT TGT.*
-        FROM APP_DF_TGT TGT
-        LEFT OUTER JOIN APP_NEW_UPDATE RES 
-        ON TGT.App_ID = RES.App_ID
-        WHERE RES.App_ID IS NULL
-        """)
-
-        new_app_df = new_app_df_rest.unionAll(new_app_df_Ins_Upd)
+        # app_df = spark.read.parquet(output_data + tblName)
+        #
+        # new_app_df.createOrReplaceTempView("APP_DF_SRC")
+        # app_df.createOrReplaceTempView("APP_DF_TGT")
+        # new_app_df_Ins_Upd = spark.sql("""
+        # SELECT SRC.*
+        # FROM APP_DF_SRC SRC
+        # LEFT OUTER JOIN APP_DF_TGT TGT
+        # ON SRC.App_ID = TGT.App_ID
+        # WHERE (TGT.App_ID IS NULL) OR (TGT.App_ID IS NOT NULL AND
+        #        (TGT.App_Name <> SRC.App_Name OR TGT.Rating <> SRC.Rating OR TGT.Rating_Num <> SRC.Rating_Num OR
+        #         TGT.Minimum_Installs <> SRC.Minimum_Installs OR TGT.Maximum_Installs <> SRC.Maximum_Installs OR
+        #         TGT.Is_Free <> SRC.Is_Free OR TGT.Price <> SRC.Price OR TGT.Currency_Type_Id <> SRC.Currency_Type_Id OR
+        #         COALESCE(TGT.Size_In_MB,-1) <> COALESCE(SRC.Size_In_MB,-1) OR TGT.Supp_OS_Version <> SRC.Supp_OS_Version OR
+        #         TGT.Developer_Id <> SRC.Developer_Id OR TGT.Last_Update_Dt <> SRC.Last_Update_Dt OR
+        #         TGT.Cont_Rating_Id <> SRC.Cont_Rating_Id OR TGT.Privacy_Policy <> SRC.Privacy_Policy OR
+        #         TGT.Is_Ad_Supported <> SRC.Is_Ad_Supported OR TGT.Is_In_App_Purchase <> SRC.Is_In_App_Purchase OR
+        #         TGT.Is_Editor_Choice <> SRC.Is_Editor_Choice
+        #         ))
+        # """)
+        # new_app_df_Ins_Upd.createOrReplaceTempView("APP_NEW_UPDATE")
+        #
+        # new_app_df_rest = spark.sql("""
+        # SELECT TGT.*
+        # FROM APP_DF_TGT TGT
+        # LEFT OUTER JOIN APP_NEW_UPDATE RES
+        # ON TGT.App_ID = RES.App_ID
+        # WHERE RES.App_ID IS NULL
+        # """)
+        #
+        # new_app_df = new_app_df_rest.union(new_app_df_Ins_Upd)
 
 
     except Exception as e:
@@ -316,30 +326,36 @@ def process_google_perm_data(spark, input_data, output_data):
         Returns:
             None
     """
+    if config["GENERAL"]["DEBUG"] == "1":
+        in_data_full = input_data
+        out_data_full = output_data
+    else:
+        in_data_full = "s3a://" + input_data + "/"
+        out_data_full = "s3a://" + output_data + "/"
 
     # Read json file create lookup using thte generic function then use_df_app in creating the relation app and permission
-    df = readGoogleJsonFile(spark,input_data)
+    df = readGoogleJsonFile(spark,in_data_full)
     df.printSchema()
-    df.show(truncate=False)
+    #df.show(truncate=False)
 
     # Create Permisison Type lookup
-    df_permType = getLookupTable(spark, df, "type", "Permission_Type_Id", "Permission_Type_Desc", output_data,
+    df_permType = getLookupTable(spark, df, "type", "Permission_Type_Id", "Permission_Type_Desc", out_data_full,
                             config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
     df_permType.cache()
     #df_permType.show(n=10)
-    df_permType.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TYPE_TBL"]+"_TEMP")
+    df_permType.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["PERMISSION_TYPE_TBL"]+"_TEMP")
     replaceTable(spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
 
     # Create Permission Table lookup
     df_perm = getPermisisonTable(spark,df,config["DL_TABLES"]["PERMISSION_TYPE_TBL"],
-                                 output_data,config["DL_TABLES"]["PERMISSION_TBL"])
-    df_perm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
+                                 out_data_full,config["DL_TABLES"]["PERMISSION_TBL"])
+    df_perm.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
 
     #Create APP_PERMISSION Table
-    df_appPerm = getAppPermissionTable(spark,df,config["DL_TABLES"]["PERMISSION_TBL"],output_data,
+    df_appPerm = getAppPermissionTable(spark,df,config["DL_TABLES"]["PERMISSION_TBL"],out_data_full,
                                        config["DL_TABLES"]["APP_PERMISSION_TBL"])
-    df_appPerm.write.mode("overwrite").parquet(output_data + config["DL_TABLES"]["APP_PERMISSION_TBL"]+"_TEMP")
+    df_appPerm.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_PERMISSION_TBL"]+"_TEMP")
     replaceTable(spark, output_data, config["DL_TABLES"]["APP_PERMISSION_TBL"])
 
 
@@ -457,8 +473,8 @@ def main():
         input_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
         output_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
     else:
-        input_data = "s3a://"+config['S3']['SOURCE_BUCKET']+"/"
-        output_data = "s3a://"+config['S3']['TARGET_BUCKET']+"/"
+        input_data = config['S3']['SOURCE_BUCKET']
+        output_data = config['S3']['TARGET_BUCKET']
 
     process_google_apps_data(spark, input_data, output_data)
     process_google_perm_data(spark,input_data, output_data)
