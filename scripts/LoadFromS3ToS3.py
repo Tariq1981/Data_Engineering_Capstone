@@ -227,11 +227,17 @@ def getDeveloperTable(spark, df,output_data,tblName):
     try:
         idCol = Window.orderBy("Src_Developer_Name")
         look_df = spark.read.parquet(output_data + tblName)
-        new_lookup_df = df.select(["Developer_Id","Developer_Website","Developer_Email"]).distinct() \
+        new_lookup_df = df.select(["Developer_Id","Developer_Website","Developer_Email","Last_Updated"]).distinct() \
             .withColumnRenamed("Developer_Id","Src_Developer_Name") \
             .withColumnRenamed("Developer_Website", "Src_Developer_Website") \
             .withColumnRenamed("Developer_Email", "Src_Developer_Email") \
             .filter(df["Developer_Id"].isNotNull() & (df["Developer_Id"] != ""))
+
+        idColQualify = Window.partitionBy("Src_Developer_Name").orderBy(fn.desc("Last_Updated"))
+        new_lookup_df = new_lookup_df.withColumn("RNK",fn.row_number().over(idColQualify)) \
+            .filter("RNK = 1") \
+            .select(["Src_Developer_Name","Src_Developer_Website","Src_Developer_Email"])
+
 
         look_max = look_df.agg(fn.max("Developer_Id").alias("max_Id"))
         resultAll = new_lookup_df.join(look_df, look_df["Developer_Name"] == new_lookup_df["Src_Developer_Name"], "left") \
@@ -265,11 +271,14 @@ def getDeveloperTable(spark, df,output_data,tblName):
     except Exception as e:
         print(e)
         idCol = Window.orderBy("Developer_Name")
-        new_lookup_df = df.select(["Developer_Id", "Developer_Website", "Developer_Email"]).distinct() \
+        new_lookup_df = df.select(["Developer_Id", "Developer_Website", "Developer_Email","Last_Updated"]).distinct() \
             .withColumnRenamed("Developer_Id", "Developer_Name")
 
-        new_lookup_df = new_lookup_df.filter(new_lookup_df["Developer_Name"].isNotNull()) \
-            .withColumn("Developer_Id", fn.row_number().over(idCol)) \
+        new_lookup_df = new_lookup_df.filter(new_lookup_df["Developer_Name"].isNotNull())
+        idColQualify = Window.partitionBy("Developer_Name").orderBy(fn.desc("Last_Updated"))
+        new_lookup_df = new_lookup_df.withColumn("RNK", fn.row_number().over(idColQualify)) \
+            .filter("RNK = 1")
+        new_lookup_df = new_lookup_df.withColumn("Developer_Id", fn.row_number().over(idCol)) \
             .select(["Developer_Id","Developer_Name","Developer_Website","Developer_Email"])
 
 
