@@ -2,6 +2,8 @@ import configparser
 import os
 from Utitlity import replaceTable
 from Utitlity import create_spark_session
+from pyspark.sql.window import Window
+import pyspark.sql.functions as fn
 
 config = configparser.ConfigParser()
 config.read('../config/etl.cfg')
@@ -54,8 +56,8 @@ def createAppFactTabe(spark,input_data):
     df_perm.createOrReplaceTempView("PERMISSION")
 
     df_agg = spark.sql("""
-        SELECT Category_Id,Currency_Type_Id,Developer_Id,EXTRACT(YEAR FROM Release_Dt) YEAR, 
-               EXTRACT(MONTH FROM Release_Dt) MONTH,Cont_Rating_Id,Permission_Type_Id,
+        SELECT Category_Id,Currency_Type_Id,Developer_Id,EXTRACT(YEAR FROM Release_Dt) Release_Year, 
+               EXTRACT(MONTH FROM Release_Dt) Release_Month,Cont_Rating_Id,Permission_Type_Id,
                COUNT(DISTINCT AP_PER.Permission_Id) Total_Num_Permissions,COUNT(DISTINCT AP.App_Id) Count_Of_Apps,
                SUM(AP.Rating)/COUNT(DISTINCT AP.App_Id) Average_Rating,SUM(Rating_Num) Total_Rating_Num,
                SUM(Maximum_Installs) Total_Installs,COUNT(DISTINCT CASE WHEN Is_Free = 'Y' THEN AP.APP_ID END) Count_Of_Free,
@@ -72,6 +74,8 @@ def createAppFactTabe(spark,input_data):
         GROuP BY Category_Id,Currency_Type_Id,Developer_Id,EXTRACT(YEAR FROM Release_Dt),EXTRACT(MONTH FROM Release_Dt),
                  Cont_Rating_Id,Permission_Type_Id
     """)
+    wid = Window.orderBy("Release_Year","Release_Month","Developer_Id")
+    df_agg = df_agg.withColumn("Auto_App_Id",fn.row_number().over(wid))
 
     return df_agg
 
