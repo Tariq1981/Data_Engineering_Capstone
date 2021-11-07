@@ -31,15 +31,17 @@ def createTables(conn,cur):
         conn.commit()
 
 def purgeTables(conn,cur):
-    for tblName in config["DWH_TABLES"].keys():
-        query = delete_table_sql.format(config["DWH_TABLES"][tblName])
+    for tblName in config["DWH_TABLES"]:
+        query = delete_table_sql.format(config["DWH_SCHEMA"]["MODEL_SCH"],config["DWH_TABLES"][tblName])
         cur.execute(query)
         conn.commit()
 
 def copyTables(conn,cur):
+
     for i in range(0,len(src_dl_tables_list)):
         query = copy_table_sql.format(trgt_dw_tables_list[i],config["S3"]["TARGET_BUCKET"],
-                                      src_dl_tables_list[i],config["S3"]["IAM_ROLE"])
+                                      src_dl_tables_list[i],config["S3"]["AWS_ACCESS_KEY_ID"],
+                                      config["S3"]["AWS_SECRET_ACCESS_KEY"])
         cur.execute(query)
         conn.commit()
 
