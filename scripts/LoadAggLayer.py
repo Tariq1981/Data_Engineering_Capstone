@@ -76,6 +76,11 @@ def createAppFactTabe(spark,input_data):
     """)
     wid = Window.orderBy("Release_Year","Release_Month","Developer_Id")
     df_agg = df_agg.withColumn("Auto_App_Id",fn.row_number().over(wid))
+    df_agg = df_agg.select(["Auto_App_Id","Category_Id","Currency_Type_Id","Developer_Id",
+                            "Release_Year","Release_Month","Cont_Rating_Id","Permission_Type_Id",
+                            "Total_Num_Permissions","Count_Of_Apps","Average_Rating","Total_Rating_Num",
+                            "Total_Installs","Count_Of_Free","Count_Of_Paid","Total_Price","Total_Size_In_MB",
+                            "Count_Ad_Supported","Count_In_App_Purchase","Count_Of_Editor_Choice"])
 
     return df_agg
 

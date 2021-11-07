@@ -1,7 +1,7 @@
 import configparser
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StringType, ArrayType , StructType,StructField
+from pyspark.sql.types import IntegerType,StringType, ArrayType , StructType,StructField
 from pyspark.sql.window import Window
 import pyspark.sql.functions as fn
 from Utitlity import replaceTable
@@ -238,10 +238,23 @@ def getDeveloperTable(spark, df,output_data,tblName):
             .filter("RNK = 1") \
             .select(["Src_Developer_Name","Src_Developer_Website","Src_Developer_Email"])
 
-
-        look_max = look_df.agg(fn.max("Developer_Id").alias("max_Id"))
-        resultAll = new_lookup_df.join(look_df, look_df["Developer_Name"] == new_lookup_df["Src_Developer_Name"], "left") \
-            .crossJoin(look_max)
+        new_lookup_df.createOrReplaceTempView("NEW_LOOKUP_DF")
+        look_df.createOrReplaceTempView("LOOKUP_DF")
+        #look_max = look_df.agg(fn.max("Developer_Id").alias("max_Id"))
+        #resultAll = new_lookup_df.join(look_df, look_df["Developer_Name"] == new_lookup_df["Src_Developer_Name"],
+        #                               "left") \
+        #    .crossJoin(look_max)
+        resultAll = spark.sql("""
+            SELECT SRC.*,TGT.*,max_Id
+            FROM NEW_LOOKUP_DF SRC
+            LEFT OUTER JOIN LOOKUP_DF TGT
+            ON SRC.Src_Developer_Name = TGT.Developer_Name
+            CROSSJOIN
+            (
+                SELECT MAX(Developer_Id) max_Id
+                FROM LOOKUP_DF
+            )
+        """)
 
         resultIns = resultAll.filter(resultAll["Developer_Id"].isNull()).withColumn("Id", fn.row_number().over(idCol)) \
             .select(["Id","Src_Developer_Name","Src_Developer_Website","Src_Developer_Email","max_Id"])
@@ -267,7 +280,7 @@ def getDeveloperTable(spark, df,output_data,tblName):
             .withColumnRenamed("Src_Developer_Website","Developer_Website") \
             .withColumnRenamed("Src_Developer_Email","Developer_Email")
 
-        new_lookup_df = look_df.unionAll(resultIns).unionAll(resultUpd)
+        new_lookup_df = restRows.unionAll(resultIns).unionAll(resultUpd)
     except Exception as e:
         print(e)
         idCol = Window.orderBy("Developer_Name")
@@ -312,6 +325,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
             .select(["Id", srcColumn, "max_Id"])
         result = result.withColumn(tgtIdColumn, result.Id + result.max_Id) \
             .withColumnRenamed(srcColumn, tgtColumn).select([tgtIdColumn, tgtColumn])
+        result.select(result[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn), tgtColumn)
 
         new_lookup_df = look_df.unionAll(result)
     except Exception as e:
@@ -319,6 +333,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
         new_lookup_df = df.select([srcColumn]).distinct().filter(df[srcColumn].isNotNull()) \
             .withColumn(tgtIdColumn, fn.row_number().over(idCol)) \
             .withColumnRenamed(srcColumn, tgtColumn)
+        new_lookup_df.select(new_lookup_df[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn),tgtColumn)
 
     return new_lookup_df
 
