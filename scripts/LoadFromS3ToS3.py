@@ -325,7 +325,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
             .select(["Id", srcColumn, "max_Id"])
         result = result.withColumn(tgtIdColumn, result.Id + result.max_Id) \
             .withColumnRenamed(srcColumn, tgtColumn).select([tgtIdColumn, tgtColumn])
-        result.select(result[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn), tgtColumn)
+        result = result.select(result[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn), tgtColumn)
 
         new_lookup_df = look_df.unionAll(result)
     except Exception as e:
@@ -333,7 +333,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
         new_lookup_df = df.select([srcColumn]).distinct().filter(df[srcColumn].isNotNull()) \
             .withColumn(tgtIdColumn, fn.row_number().over(idCol)) \
             .withColumnRenamed(srcColumn, tgtColumn)
-        new_lookup_df.select(new_lookup_df[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn),tgtColumn)
+        new_lookup_df = new_lookup_df.select(new_lookup_df[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn),tgtColumn)
 
     return new_lookup_df
 
