@@ -1,9 +1,11 @@
+import subprocess
+from io import StringIO
+
+from pyspark import SparkFiles
 from pyspark.sql import SparkSession
 import configparser
 import boto3
 
-config = configparser.ConfigParser()
-config.read('../config/etl.cfg')
 
 
 def create_spark_session():
@@ -16,22 +18,33 @@ def create_spark_session():
             spark: SparkSession object
     """
     # .master("spark://192.168.56.1:7077") \
-    spark = SparkSession \
-        .builder \
-        .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
-        .config("spark.executor.heartbeatInterval","3600s") \
-        .config("spark.files.fetchTimeout", "3600s") \
-        .config("spark.network.timeout", "4600s") \
-        .config("spark.storage.blockManagerSlaveTimeoutMs","3600s") \
-        .config("spark.executor.heartbeatInterval","3600s") \
-        .config("fs.s3a.access.key",config["S3"]["AWS_ACCESS_KEY_ID"]) \
-        .config("fs.s3a.secret.key", config["S3"]["AWS_SECRET_ACCESS_KEY"]) \
-        .getOrCreate()
+    #spark.stop()
 
+    # spark = SparkSession \
+    #     .builder \
+    #     .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
+    #     .config("spark.executor.heartbeatInterval","3600s") \
+    #     .config("spark.files.fetchTimeout", "3600s") \
+    #     .config("spark.network.timeout", "4600s") \
+    #     .config("spark.storage.blockManagerSlaveTimeoutMs","3600s") \
+    #     .config("spark.executor.heartbeatInterval","3600s") \
+    #     .config("fs.s3a.access.key",config["S3"]["AWS_ACCESS_KEY_ID"]) \
+    #     .config("fs.s3a.secret.key", config["S3"]["AWS_SECRET_ACCESS_KEY"]) \
+    #     .getOrCreate()
+    spark = SparkSession.builder.getOrCreate()
+    config = getConfig(spark)
+    spark.conf.set("fs.s3a.access.key",config["S3"]["AWS_ACCESS_KEY_ID"])
+    spark.conf.set("fs.s3a.secret.key", config["S3"]["AWS_SECRET_ACCESS_KEY"])
 
     return spark
 
-def replaceTable(spark,output_data,tblName):
+def getConfig(spark):
+    credstr = spark.sparkContext.textFile("/user/"+spark.sparkContext.sparkUser()+"/.sparkStaging/"+spark.sparkContext.applicationId+"/etl.cfg").collect()
+    config = configparser.ConfigParser()
+    res=config.read_string("\n".join(credstr))
+    return config
+
+def replaceTable(config,spark,output_data,tblName):
     """
         Description: This function is used to replace the old data with new one.
 

@@ -2,17 +2,12 @@ import configparser
 import os
 from Utitlity import replaceTable
 from Utitlity import create_spark_session
+from Utitlity import getConfig
 from pyspark.sql.window import Window
 import pyspark.sql.functions as fn
 
-config = configparser.ConfigParser()
-config.read('../config/etl.cfg')
 
-os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
-os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
-
-
-def createAggTables(spark, input_data, output_data):
+def createAggTables(config,spark, input_data, output_data):
     """
         Description: This function call the functions which create the aggregate tables.
 
@@ -30,11 +25,11 @@ def createAggTables(spark, input_data, output_data):
     else:
         in_data_full = "s3a://" + input_data + "/"
         out_data_full = "s3a://" + output_data + "/"
-    df_app_fact = createAppFactTabe(spark,in_data_full)
+    df_app_fact = createAppFactTabe(config,spark,in_data_full)
     df_app_fact.write.mode("overwrite").parquet(out_data_full + config["DWH_TABLES"]["APP_FACT_FT"] + "_TEMP")
-    replaceTable(spark, output_data, config["DWH_TABLES"]["APP_FACT_FT"])
+    replaceTable(config,spark, output_data, config["DWH_TABLES"]["APP_FACT_FT"])
 
-def createAppFactTabe(spark,input_data):
+def createAppFactTabe(config,spark,input_data):
     """
         Description: This function create the APP_FACT table
 
@@ -46,7 +41,6 @@ def createAppFactTabe(spark,input_data):
             df_agg: The app aggregate dataframe
     """
 
-    spark = create_spark_session()
     df_app = spark.read.parquet(input_data + config['DL_TABLES']['APP_TBL'])
     df_appPerm = spark.read.parquet(input_data + config['DL_TABLES']['APP_PERMISSION_TBL'])
     df_perm = spark.read.parquet(input_data + config['DL_TABLES']['PERMISSION_TBL'])
@@ -87,6 +81,10 @@ def createAppFactTabe(spark,input_data):
 
 def main():
     spark = create_spark_session()
+    config = getConfig(spark)
+    os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
+    os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
+
     if config['GENERAL']['DEBUG'] == "1":
         input_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
         output_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
@@ -94,7 +92,7 @@ def main():
         input_data = config['S3']['TARGET_BUCKET']
         output_data = config['S3']['TARGET_BUCKET']
 
-    createAggTables(spark,input_data,output_data)
+    createAggTables(config,spark,input_data,output_data)
 
 
 if __name__ == "__main__":

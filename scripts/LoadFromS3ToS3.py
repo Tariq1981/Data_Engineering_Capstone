@@ -1,19 +1,15 @@
 import configparser
 import os
-from pyspark.sql import SparkSession
+import sys
+from pyspark import SparkFiles
 from pyspark.sql.types import IntegerType,StringType, ArrayType , StructType,StructField
 from pyspark.sql.window import Window
 import pyspark.sql.functions as fn
 from Utitlity import replaceTable
 from Utitlity import create_spark_session
+from Utitlity import getConfig
 
-config = configparser.ConfigParser()
-config.read('../config/etl.cfg')
-
-os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
-os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
-
-def process_google_apps_data(spark, input_data, output_data):
+def process_google_apps_data(config,spark, input_data, output_data):
     """
         Description: This function processes the main google app csv file
 
@@ -32,44 +28,44 @@ def process_google_apps_data(spark, input_data, output_data):
         in_data_full = "s3a://" + input_data + "/"
         out_data_full = "s3a://" + output_data + "/"
 
-    df = readGoogleAppFile(spark, in_data_full)
+    df = readGoogleAppFile(config,spark, in_data_full)
     # df.filter(df["Currency"] == "9126997").show(truncate=False)
     #df.show()
 
     # Create Developer Table
     df_dev = getDeveloperTable(spark,df,out_data_full,config["DL_TABLES"]["DEVELOPER_TBL"])
     df_dev.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["DEVELOPER_TBL"]+"_TEMP")
-    replaceTable(spark,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
+    replaceTable(config,spark,output_data,config["DL_TABLES"]["DEVELOPER_TBL"])
 
     # Create App_Category Table
     df_cat = getLookupTable(spark, df, "Category", "Category_Id", "Category_Desc", out_data_full,
                             config["DL_TABLES"]["APP_CATEGORY_TBL"])
     df_cat.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_CATEGORY_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["APP_CATEGORY_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["APP_CATEGORY_TBL"])
 
     # Create Content_Rating Table
     df_cntRat = getLookupTable(spark, df, "Content_Rating", "Cont_Rating_Id", "Cont_Rating_Desc", out_data_full,
                                config["DL_TABLES"]["CONTENT_RATING_TBL"])
     df_cntRat.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["CONTENT_RATING_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["CONTENT_RATING_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["CONTENT_RATING_TBL"])
 
     # Create CURRENCY_TYPE Table
     df_curr = getLookupTable(spark, df, "Currency", "Currency_Type_Id", "Currency_Type_Desc", out_data_full,
                              config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
     df_curr.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["CURRENCY_TYPE_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["CURRENCY_TYPE_TBL"])
 
     #Create APP Table
     df_app = getAppTable(spark,df,config["DL_TABLES"]["APP_CATEGORY_TBL"],config["DL_TABLES"]["CONTENT_RATING_TBL"],
                          config["DL_TABLES"]["CURRENCY_TYPE_TBL"],config["DL_TABLES"]["DEVELOPER_TBL"],
                          out_data_full,config["DL_TABLES"]["APP_TBL"])
     df_app.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["APP_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["APP_TBL"])
     #df_app.show(truncate=False)
 
 
 
-def readGoogleAppFile(spark,input_data):
+def readGoogleAppFile(config,spark,input_data):
     """
         Description: This function read the google app csv file. It uses noraml text read which read the whole line
         as one string. This is due to quotes and comma characters are included in the name field.
@@ -338,7 +334,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
     return new_lookup_df
 
 
-def process_google_perm_data(spark, input_data, output_data):
+def process_google_perm_data(config,spark, input_data, output_data):
     """
         Description: This funciton processes the google app permission json file
 
@@ -358,7 +354,7 @@ def process_google_perm_data(spark, input_data, output_data):
         out_data_full = "s3a://" + output_data + "/"
 
     # Read json file create lookup using thte generic function then use_df_app in creating the relation app and permission
-    df = readGoogleJsonFile(spark,in_data_full)
+    df = readGoogleJsonFile(config,spark,in_data_full)
     df.printSchema()
     #df.show(truncate=False)
 
@@ -368,19 +364,19 @@ def process_google_perm_data(spark, input_data, output_data):
     df_permType.cache()
     #df_permType.show(n=10)
     df_permType.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["PERMISSION_TYPE_TBL"]+"_TEMP")
-    replaceTable(spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
+    replaceTable(config,spark,output_data,config["DL_TABLES"]["PERMISSION_TYPE_TBL"])
 
     # Create Permission Table lookup
     df_perm = getPermisisonTable(spark,df,config["DL_TABLES"]["PERMISSION_TYPE_TBL"],
                                  out_data_full,config["DL_TABLES"]["PERMISSION_TBL"])
     df_perm.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["PERMISSION_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["PERMISSION_TBL"])
 
     #Create APP_PERMISSION Table
     df_appPerm = getAppPermissionTable(spark,df,config["DL_TABLES"]["PERMISSION_TBL"],out_data_full,
                                        config["DL_TABLES"]["APP_PERMISSION_TBL"])
     df_appPerm.write.mode("overwrite").parquet(out_data_full + config["DL_TABLES"]["APP_PERMISSION_TBL"]+"_TEMP")
-    replaceTable(spark, output_data, config["DL_TABLES"]["APP_PERMISSION_TBL"])
+    replaceTable(config,spark, output_data, config["DL_TABLES"]["APP_PERMISSION_TBL"])
 
 
 def getAppPermissionTable(spark,df,permTableName,output_data,tblName):
@@ -462,7 +458,7 @@ def getPermisisonTable(spark,df,permTypeTableName,output_data,tblName):
     return df_perm_new
 
 
-def readGoogleJsonFile(spark,input_data):
+def readGoogleJsonFile(config,spark,input_data):
     """
         Description: This function read the google app permission json file.
 
@@ -493,6 +489,11 @@ def readGoogleJsonFile(spark,input_data):
 
 def main():
     spark = create_spark_session()
+    config = getConfig(spark)
+    os.environ['AWS_ACCESS_KEY_ID'] = config['S3']['AWS_ACCESS_KEY_ID']
+    os.environ['AWS_SECRET_ACCESS_KEY'] = config['S3']['AWS_SECRET_ACCESS_KEY']
+
+
     if config['GENERAL']['DEBUG'] == "1":
         input_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
         output_data = "C:/Downloads/Courses/Udacity_Data_Engineering/Data_Engineering_Capstone/"
@@ -500,8 +501,8 @@ def main():
         input_data = config['S3']['SOURCE_BUCKET']
         output_data = config['S3']['TARGET_BUCKET']
 
-    process_google_apps_data(spark, input_data, output_data)
-    process_google_perm_data(spark,input_data, output_data)
+    process_google_apps_data(config,spark, input_data, output_data)
+    process_google_perm_data(config,spark,input_data, output_data)
 
 
 if __name__ == "__main__":
