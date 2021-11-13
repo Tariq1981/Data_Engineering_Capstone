@@ -1,12 +1,35 @@
 from datetime import datetime, timedelta
-import os
+import configparser
+import json
+
+from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
+
+import SQLQueries
 from airflow import DAG
+from airflow.models import Variable
 from airflow.operators.dummy import DummyOperator
-#from airflow.providers.apache.livy.operators.livy import LivyOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.operators.emr_add_steps import EmrAddStepsOperator
 from airflow.providers.amazon.aws.operators.emr_create_job_flow import EmrCreateJobFlowOperator
 from airflow.providers.amazon.aws.operators.emr_terminate_job_flow import EmrTerminateJobFlowOperator
 from airflow.providers.amazon.aws.sensors.emr_step import EmrStepSensor
+from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+
+
+
+def getConfig(S3_config_con_id,key_name,bucket_name):
+    hook = S3Hook(S3_config_con_id)
+    file_contents = hook.read_key(key = key_name,bucket_name=bucket_name)
+    config = configparser.ConfigParser()
+    config.read_string(file_contents)
+    jstr = json.dumps(config._sections)
+    return jstr
+
+def getConfigValue(jstr,Key1,Key2):
+    dictConf = json.loads(jstr)
+    return dictConf[Key1][Key2.lower()]
+
 
 default_args = {
     'owner': 'Tariq',
@@ -19,7 +42,10 @@ dag = DAG('Google_Apps_Analysis',
           default_args=default_args,
           description='Load and transform data in S3 and Redshift',
           schedule_interval=None,
-          catchup=False
+          catchup=False,
+          user_defined_macros={
+              'getConfigValue':getConfigValue
+          }
         )
 
 
@@ -102,55 +128,247 @@ SPARK_SECOND_STEP = [
         }
     }
 ]
+copy_options=['FORMAT AS PARQUET','COMPUPDATE OFF','STATUPDATE OFF']
 
 start_operator = DummyOperator(task_id='Begin_execution',  dag=dag)
+
 end_operator = DummyOperator(task_id='End_execution',  dag=dag)
-create_emr_cluster = EmrCreateJobFlowOperator(
-    task_id="create_emr_cluster",
-    job_flow_overrides=JOB_FLOW_OVERRIDES,
+
+get_config = PythonOperator(
+    task_id="config_retrieval",
+    python_callable=getConfig,
+    op_kwargs={"S3_config_con_id":"aws_default",
+               "key_name":Variable.get("ETL_Config_File"),
+               "bucket_name":Variable.get("ETL_Config_Bucket")},
+    dag=dag
+)
+
+
+create_schema = PostgresOperator(
+    task_id='create_schema',
+    postgres_conn_id="postgres_default",
+    sql=SQLQueries.create_schema.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}"
+    ),
+    dag=dag
+)
+create_purge_app_fact = PostgresOperator(
+    task_id='create_purge_app_fact_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_app_fact_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_FACT_FT')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_FACT_FT')}}"
+        )
+    ],
+    dag=dag
+)
+create_purge_app_category = PostgresOperator(
+    task_id='create_purge_app_category_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_app_category_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_CATEGORY_DM')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_CATEGORY_DM')}}"
+        )
+    ],
+    dag=dag
+)
+create_purge_currency_type = PostgresOperator(
+    task_id='create_purge_currency_type_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_currency_type_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CURRENCY_TYPE_DM')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CURRENCY_TYPE_DM')}}"
+        )
+    ],
+    dag=dag
+)
+create_purge_developer = PostgresOperator(
+    task_id='create_purge_developer_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_developer_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','DEVELOPER_DM')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','DEVELOPER_DM')}}"
+        )
+    ],
+    dag=dag
+)
+create_purge_content_rating = PostgresOperator(
+    task_id='create_purge_content_rating_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_content_rating_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CONTENT_RATING_DM')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CONTENT_RATING_DM')}}"
+        )
+    ],
+    dag=dag
+)
+create_purge_permission_type = PostgresOperator(
+    task_id='create_purge_permission_type_tbl',
+    postgres_conn_id="postgres_default",
+    sql=[
+        SQLQueries.create_permission_type_table.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','PERMISSION_TYPE_DM')}}"
+        ),
+        SQLQueries.delete_table_sql.format(
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+            "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','PERMISSION_TYPE_DM')}}"
+        )
+    ],
+    dag=dag
+)
+copy_app_fact = S3ToRedshiftOperator(
+    task_id='copy_app_fact',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
     aws_conn_id="aws_default",
-    emr_conn_id="emr_default",
-    dag=dag,
-)
-
-S3FirstLayer = EmrAddStepsOperator(
-    task_id='first_layer_s3',
-    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-    aws_conn_id='aws_default',
-    steps=SPARK_FIRST_STEP,
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_FACT_FT')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_FACT_FT')}}",
+    copy_options=copy_options,
     dag=dag
 )
-
-first_step_checker = EmrStepSensor(
-    task_id='watch_first_step',
-    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-    step_id="{{ task_instance.xcom_pull('first_layer_s3', key='return_value')[1] }}",
-    aws_conn_id='aws_default',
-    dag=dag
-)
-
-S3SecondLayer = EmrAddStepsOperator(
-    task_id='second_layer_s3',
-    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-    aws_conn_id='aws_default',
-    steps=SPARK_SECOND_STEP,
-    dag=dag
-)
-
-second_step_checker = EmrStepSensor(
-    task_id='watch_second_step',
-    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-    step_id="{{ task_instance.xcom_pull('second_layer_s3', key='return_value')[0] }}",
-    aws_conn_id='aws_default',
-    dag=dag
-)
-
-terminate_emr_cluster = EmrTerminateJobFlowOperator(
-    task_id="terminate_emr_cluster",
-    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+copy_app_category = S3ToRedshiftOperator(
+    task_id='copy_app_category',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
     aws_conn_id="aws_default",
-    dag=dag,
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DL_TABLES','APP_CATEGORY_TBL')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_CATEGORY_DM')}}",
+    copy_options=copy_options,
+    dag=dag
 )
-start_operator >> create_emr_cluster >> S3FirstLayer >> first_step_checker
-first_step_checker >> S3SecondLayer >> second_step_checker >> terminate_emr_cluster >> end_operator
+copy_currency_type = S3ToRedshiftOperator(
+    task_id='copy_currency_type',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
+    aws_conn_id="aws_default",
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DL_TABLES','CURRENCY_TYPE_TBL')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CURRENCY_TYPE_DM')}}",
+    copy_options=copy_options,
+    dag=dag
+)
+copy_developer = S3ToRedshiftOperator(
+    task_id='copy_developer',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
+    aws_conn_id="aws_default",
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DL_TABLES','DEVELOPER_TBL')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','DEVELOPER_DM')}}",
+    copy_options=copy_options,
+    dag=dag
+)
+copy_content_rating = S3ToRedshiftOperator(
+    task_id='copy_content_rating',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
+    aws_conn_id="aws_default",
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DL_TABLES','CONTENT_RATING_TBL')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CONTENT_RATING_DM')}}",
+    copy_options=copy_options,
+    dag=dag
+)
+copy_permission_type = S3ToRedshiftOperator(
+    task_id='copy_permission_type',
+    s3_bucket="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'S3','TARGET_BUCKET')}}",
+    aws_conn_id="aws_default",
+    redshift_conn_id="postgres_default",
+    schema="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+    s3_key="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DL_TABLES','PERMISSION_TYPE_TBL')}}",
+    table="{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','PERMISSION_TYPE_DM')}}",
+    copy_options=copy_options,
+    dag=dag
+)
+
+start_operator >> get_config >> create_schema
+create_schema >> create_purge_app_fact >> copy_app_fact
+create_schema >> create_purge_app_category >> copy_app_category
+create_schema >> create_purge_currency_type >> copy_currency_type
+create_schema >> create_purge_developer >> copy_developer
+create_schema >> create_purge_content_rating >> copy_content_rating
+create_schema >> create_purge_permission_type >> copy_permission_type
+copy_app_fact >> end_operator
+copy_app_category >> end_operator
+copy_currency_type >> end_operator
+copy_developer >> end_operator
+copy_content_rating >> end_operator
+copy_permission_type >> end_operator
+
+# create_emr_cluster = EmrCreateJobFlowOperator(
+#     task_id="create_emr_cluster",
+#     job_flow_overrides=JOB_FLOW_OVERRIDES,
+#     aws_conn_id="aws_default",
+#     emr_conn_id="emr_default",
+#     dag=dag,
+# )
+#
+# S3FirstLayer = EmrAddStepsOperator(
+#     task_id='first_layer_s3',
+#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+#     aws_conn_id='aws_default',
+#     steps=SPARK_FIRST_STEP,
+#     dag=dag
+# )
+#
+# first_step_checker = EmrStepSensor(
+#     task_id='watch_first_step',
+#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+#     step_id="{{ task_instance.xcom_pull('first_layer_s3', key='return_value')[1] }}",
+#     aws_conn_id='aws_default',
+#     dag=dag
+# )
+#
+# S3SecondLayer = EmrAddStepsOperator(
+#     task_id='second_layer_s3',
+#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+#     aws_conn_id='aws_default',
+#     steps=SPARK_SECOND_STEP,
+#     dag=dag
+# )
+#
+# second_step_checker = EmrStepSensor(
+#     task_id='watch_second_step',
+#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+#     step_id="{{ task_instance.xcom_pull('second_layer_s3', key='return_value')[0] }}",
+#     aws_conn_id='aws_default',
+#     dag=dag
+# )
+#
+# terminate_emr_cluster = EmrTerminateJobFlowOperator(
+#     task_id="terminate_emr_cluster",
+#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+#     aws_conn_id="aws_default",
+#     dag=dag,
+# )
+# start_operator >> create_emr_cluster >> S3FirstLayer >> first_step_checker
+# first_step_checker >> S3SecondLayer >> second_step_checker >> terminate_emr_cluster >> end_operator
 
