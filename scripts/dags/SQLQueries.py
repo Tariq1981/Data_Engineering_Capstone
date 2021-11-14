@@ -84,3 +84,34 @@ CREATE TABLE IF NOT EXISTS {}
 	primary key(Permission_Type_Id)
 );
 """
+
+check_table_count_only = """
+SET SEARCH_PATH TO {};
+SELECT COUNT(*) row_count
+FROM {};
+"""
+
+check_table_count_duplicates = """
+SET SEARCH_PATH TO {};
+SELECT row_count, 
+       CASE 
+            WHEN cnt_dups > 0 THEN 0
+            ELSE 1
+       END dup_flg
+FROM
+(
+    SELECT COUNT(*) row_count
+    FROM {}
+) cnt
+CROSS JOIN
+(
+    SELECT COUNT(*) cnt_dups
+    FROM
+    (
+        SELECT {},count(*) cnt
+        FROM {}
+        GROUP BY {}   
+        HAVING count(*) > 1
+    ) X
+) dups; 
+"""

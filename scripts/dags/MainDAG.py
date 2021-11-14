@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import configparser
 import json
 
+from airflow.operators.sql import SQLCheckOperator
 from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 
 import SQLQueries
@@ -308,67 +309,135 @@ copy_permission_type = S3ToRedshiftOperator(
     copy_options=copy_options,
     dag=dag
 )
+check_fact_app_cnt = SQLCheckOperator(
+    task_id="check_fact_app_cnt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_only.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_FACT_FT')}}"
+    ),
+    dag=dag
+)
+check_app_category_qlt = SQLCheckOperator(
+    task_id="check_app_category_qlt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_duplicates.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_CATEGORY_DM')}}",
+        "Category_Desc",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','APP_CATEGORY_DM')}}",
+        "Category_Desc"
+    ),
+    dag=dag
+)
+check_currency_type_qlt = SQLCheckOperator(
+    task_id="check_currency_type_qlt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_duplicates.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CURRENCY_TYPE_DM')}}",
+        "Currency_Type_Desc",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CURRENCY_TYPE_DM')}}",
+        "Currency_Type_Desc"
+    ),
+    dag=dag
+)
+check_developer_qlt = SQLCheckOperator(
+    task_id="check_developer_qlt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_duplicates.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','DEVELOPER_DM')}}",
+        "Developer_Name",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','DEVELOPER_DM')}}",
+        "Developer_Name"
+    ),
+    dag=dag
+)
+check_content_rating_qlt = SQLCheckOperator(
+    task_id="check_content_rating_qlt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_duplicates.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CONTENT_RATING_DM')}}",
+        "Cont_Rating_Desc",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','CONTENT_RATING_DM')}}",
+        "Cont_Rating_Desc"
+    ),
+    dag=dag
+)
+check_permission_type_qlt = SQLCheckOperator(
+    task_id="check_permission_type_qlt",
+    conn_id = "postgres_default",
+    sql= SQLQueries.check_table_count_duplicates.format(
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_SCHEMA','MODEL_SCH')}}",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','PERMISSION_TYPE_DM')}}",
+        "Permission_Type_Desc",
+        "{{getConfigValue(task_instance.xcom_pull(task_ids='config_retrieval', key='return_value'),'DWH_TABLES','PERMISSION_TYPE_DM')}}",
+        "Permission_Type_Desc"
+    ),
+    dag=dag
+)
 
-start_operator >> get_config >> create_schema
-create_schema >> create_purge_app_fact >> copy_app_fact
-create_schema >> create_purge_app_category >> copy_app_category
-create_schema >> create_purge_currency_type >> copy_currency_type
-create_schema >> create_purge_developer >> copy_developer
-create_schema >> create_purge_content_rating >> copy_content_rating
-create_schema >> create_purge_permission_type >> copy_permission_type
-copy_app_fact >> end_operator
-copy_app_category >> end_operator
-copy_currency_type >> end_operator
-copy_developer >> end_operator
-copy_content_rating >> end_operator
-copy_permission_type >> end_operator
 
-# create_emr_cluster = EmrCreateJobFlowOperator(
-#     task_id="create_emr_cluster",
-#     job_flow_overrides=JOB_FLOW_OVERRIDES,
-#     aws_conn_id="aws_default",
-#     emr_conn_id="emr_default",
-#     dag=dag,
-# )
-#
-# S3FirstLayer = EmrAddStepsOperator(
-#     task_id='first_layer_s3',
-#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-#     aws_conn_id='aws_default',
-#     steps=SPARK_FIRST_STEP,
-#     dag=dag
-# )
-#
-# first_step_checker = EmrStepSensor(
-#     task_id='watch_first_step',
-#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-#     step_id="{{ task_instance.xcom_pull('first_layer_s3', key='return_value')[1] }}",
-#     aws_conn_id='aws_default',
-#     dag=dag
-# )
-#
-# S3SecondLayer = EmrAddStepsOperator(
-#     task_id='second_layer_s3',
-#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-#     aws_conn_id='aws_default',
-#     steps=SPARK_SECOND_STEP,
-#     dag=dag
-# )
-#
-# second_step_checker = EmrStepSensor(
-#     task_id='watch_second_step',
-#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-#     step_id="{{ task_instance.xcom_pull('second_layer_s3', key='return_value')[0] }}",
-#     aws_conn_id='aws_default',
-#     dag=dag
-# )
-#
-# terminate_emr_cluster = EmrTerminateJobFlowOperator(
-#     task_id="terminate_emr_cluster",
-#     job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-#     aws_conn_id="aws_default",
-#     dag=dag,
-# )
-# start_operator >> create_emr_cluster >> S3FirstLayer >> first_step_checker
-# first_step_checker >> S3SecondLayer >> second_step_checker >> terminate_emr_cluster >> end_operator
+create_emr_cluster = EmrCreateJobFlowOperator(
+    task_id="create_emr_cluster",
+    job_flow_overrides=JOB_FLOW_OVERRIDES,
+    aws_conn_id="aws_default",
+    emr_conn_id="emr_default",
+    dag=dag,
+)
 
+S3FirstLayer = EmrAddStepsOperator(
+    task_id='first_layer_s3',
+    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+    aws_conn_id='aws_default',
+    steps=SPARK_FIRST_STEP,
+    dag=dag
+)
+
+first_step_checker = EmrStepSensor(
+    task_id='watch_first_step',
+    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+    step_id="{{ task_instance.xcom_pull('first_layer_s3', key='return_value')[1] }}",
+    aws_conn_id='aws_default',
+    dag=dag
+)
+
+S3SecondLayer = EmrAddStepsOperator(
+    task_id='second_layer_s3',
+    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+    aws_conn_id='aws_default',
+    steps=SPARK_SECOND_STEP,
+    dag=dag
+)
+
+second_step_checker = EmrStepSensor(
+    task_id='watch_second_step',
+    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+    step_id="{{ task_instance.xcom_pull('second_layer_s3', key='return_value')[0] }}",
+    aws_conn_id='aws_default',
+    dag=dag
+)
+
+terminate_emr_cluster = EmrTerminateJobFlowOperator(
+    task_id="terminate_emr_cluster",
+    job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+    aws_conn_id="aws_default",
+    dag=dag,
+)
+start_operator >> create_emr_cluster >> S3FirstLayer >> first_step_checker
+first_step_checker >> S3SecondLayer >> second_step_checker >> terminate_emr_cluster
+terminate_emr_cluster >> get_config >> create_schema
+create_schema >> create_purge_app_fact >> copy_app_fact >> check_fact_app_cnt
+create_schema >> create_purge_app_category >> copy_app_category >> check_app_category_qlt
+create_schema >> create_purge_currency_type >> copy_currency_type >> check_currency_type_qlt
+create_schema >> create_purge_developer >> copy_developer >> check_developer_qlt
+create_schema >> create_purge_content_rating >> copy_content_rating >> check_content_rating_qlt
+create_schema >> create_purge_permission_type >> copy_permission_type >> check_permission_type_qlt
+check_fact_app_cnt >> end_operator
+check_app_category_qlt >> end_operator
+check_currency_type_qlt >> end_operator
+check_developer_qlt >> end_operator
+check_content_rating_qlt >> end_operator
+check_permission_type_qlt >> end_operator
