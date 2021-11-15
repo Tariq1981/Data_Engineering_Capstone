@@ -114,7 +114,7 @@ for the final model.
      
   - ### **Setup steps:**
     - Create AWS user with read and write access on S3 and full access on EMR. 
-    - Create an S3 bucket which holds the pyspark scripts (![First Layer](scripts/LoadFromS3ToS3.py),![First Layer](scripts/LoadAggLayer.py)) and configration file for the etl process (![ETL config](config/etl.cfg)).
+    - Create an S3 bucket which holds the pyspark scripts ([First Layer](/scripts/LoadFromS3ToS3.py),[First Layer](/scripts/LoadAggLayer.py)) and configration file for the etl process (![ETL config](config/etl.cfg)).
     - Create an S3 Bucket which will hold the source data. This should be reflected in the etl.cfg file.
     - Update teh etl.cfg file with AWS credential.
     - Add the following variables in Airflow:
@@ -123,18 +123,32 @@ for the final model.
     - Update the following connection configuration on Airflow:
       - postgres_default: This will hold teh Redshift connection information.
       - aws_default: This will hold the AWS credentials and default region.
-    - Deploy [!MainDAG](scripts/dags/MainDAG.py) and [!SQLQueries](scripts/dags/SQLQueries.py) on Airflow server in the dags folder.
+    - Deploy [MainDAG](/scripts/dags/MainDAG.py) and [SQLQueries](/scripts/dags/SQLQueries.py) on Airflow server in the dags folder.
+
+   
+  - ### **Issues and solutions:**
+    - Embedded quotes in the lines in teh csv file. This has been solved by reading the whole line and parse it using regular expressions.
+    - Updating the parquet files on S3. This has been solved by saving the newer version with temp name and delete the old version and renaming the newer version with the original name.
+    - Developed information contains similar developer with different email or website. The logic has been developed to get the latest developer information based on teh updated date of the app.
 
 
-  - reading text file not direct due to comma and quotes embedded so read parse using regex
-    - Developer to get latest information used Updated_Dt
-    - App is full dump every time and the aggregate the same.
-
-  - ### **Loading steps:**
-
-
-  - ### **Files and description:**        
-    
+  - ### **Files and description:**
+    - [etl.cfg](/config/etl.cfg): This is the configuration file for the whole ETL process. 
+      This resides in certain S3 bucket. It contains the following:
+      - Table names on S3 and Redshift.
+      - AWS connection and buckets information.
+      - File names
+      - Schema names
+    - [MainDAG.py](/scripts/dags/MainDAG.py): This is the Airflow DAG which contain the whole ETL pipeline.
+       ![dag.png](images/dag.png) 
+    - [SQLQueries](/scripts/dags/SQLQueries.py): It contains the queries used in the DAG script.
+    - [LoadFromS3ToS3.py](/scripts/LoadFromS3ToS3.py): It contains the logic used to create or update the parquet files in the first layer in the model on S3.
+    - [LoadAggLayer.py](/scripts/LoadAggLayer.py): It contains the logic used to create or update the aggregation layer which is currently include one table only (APP_FACT) on S3. 
+    - [LoadToRedShift.py](/scripts/LoadToRedShift.py): This script is used to load the data to redshift. It is not used in the pipeline. It is developed only to test the logic which incorporated in the Airflow DAG.
+    - [Utitlity.py](/scripts/Utitlity.py): A Utility script which contains the common functions used by the scripts mentioned above.
+    - [SQLQueries.py](/scripts/SQLQueries.py): Script contains the common queries used by the LoadToRedShift.py. This script also is not used in production and can be used only for debugging.
+    - [App_Table_DDL.sql](/SQL/App_Table_DDL.sql): DDL script for creating the tables in the first layer. It is used as guide while developing the pyspark scripts.
+    - [Agg_App_Table_Star_DDL.sql](SQL/Agg_App_Table_Star_DDL.sql): DDL script for for creating the aggregate table. It is used as a guide in developing the DDL used within the python script.
 
   - ### **Other Scenarios:**
     - The data was increased by 100x: The following can mitigate these challenge:
@@ -149,3 +163,10 @@ for the final model.
 
 
   - ### **Proposed enhancements:**
+    - APP table to be incremental.
+    - To use framework like Apache Hudi or Deltalake to facilitate the Upsert operation on S3. This will remove the step which boto3 is used to rename the new verios to be the original version for the table.
+
+
+
+
+
