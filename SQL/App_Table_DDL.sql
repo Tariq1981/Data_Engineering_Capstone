@@ -41,7 +41,7 @@ create table App
 	Price FLOAT,
 	Currency_Type_Id INT,
 	Size_In_MB FLOAT,
-	Min_OS_Version text,
+	Supp_OS_Version text,
 	Developer_Id INT,
 	Release_Dt DATE,
 	Last_Update_Dt DATE,
