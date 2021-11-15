@@ -40,7 +40,7 @@ for the final model.
        - Price: Price of the app on google app store.
        - Currency_Type_Id: Foreign key to the table Currency_Type.
        - Siz_In_MB: Disk Size of the app in megabytes.
-       - Min_OS_Version: Minimum Android OS version supported by the app.
+       - Supp_OS_Version: Minimum Android OS version supported by the app.
        - Developer_Id: Foreign key to the table Developer.
        - Relase_Dt: The first release date for the app.
        - Last_Update_Dt: The date for the last update of this app.
@@ -105,16 +105,47 @@ for the final model.
 
    - ### **Architecture:**
      - The following AWS components are used in composing the architecture used to implementing the loading process for the data:
-       - S3: It will serve as a landing area for the data which are scrapped from google play store. It will also serve as a data lake which will hold the first model layer.
+       - S3: It will serve as a landing area for the data which are scrapped from google play store. It will also serve as a data lake which will hold the first model layer. It will also hold the scripts and configuration file.
        - EMR: This will be the Hadoop cluster which will be used to run spark jobs.
        - Redshift: This will model the aggregation layer which will serve the reporting requirements and the BI tool can connect to it and generate whatever reports.
-       - AirFlow: It will be used to put all things togather and manage the whole workflow for loading the first nd second layer.
+       - AirFlow: It will be used to put all things together and manage the whole workflow for loading the first nd second layer.
        
 ![Arrchitecture](images/AWS_Architecture.png)       
      
-  - ### **Loading Steps:**
-    - 
-         - and put image and describe the ETL steps
+  - ### **Setup steps:**
+    - Create AWS user with read and write access on S3 and full access on EMR. 
+    - Create an S3 bucket which holds the pyspark scripts (![First Layer](scripts/LoadFromS3ToS3.py),![First Layer](scripts/LoadAggLayer.py)) and configration file for the etl process (![ETL config](config/etl.cfg)).
+    - Create an S3 Bucket which will hold the source data. This should be reflected in the etl.cfg file.
+    - Update teh etl.cfg file with AWS credential.
+    - Add the following variables in Airflow:
+      - ETL_Config_File: This will hold the name of the config file (etl.cfg)
+      - ETL_Config_Bucket: This will hold the name of the bucket which contains the config file.
+    - Update the following connection configuration on Airflow:
+      - postgres_default: This will hold teh Redshift connection information.
+      - aws_default: This will hold the AWS credentials and default region.
+    - Deploy [!MainDAG](scripts/dags/MainDAG.py) and [!SQLQueries](scripts/dags/SQLQueries.py) on Airflow server in the dags folder.
 
-        
+
+  - reading text file not direct due to comma and quotes embedded so read parse using regex
+    - Developer to get latest information used Updated_Dt
+    - App is full dump every time and the aggregate the same.
+
+  - ### **Loading steps:**
+
+
+  - ### **Files and description:**        
     
+
+  - ### **Other Scenarios:**
+    - The data was increased by 100x: The following can mitigate these challenge:
+      - Scale the EMR cluster vertically by using larger instances (CPU and Memory).
+      - Scale the EMR cluster horizontally by adding more instances.
+      - Add more space and add cpu power to the redshift cluster. The increase in space will be the dominant. 
+      - Change the loading type to be incremental for the APP and APP_FACT table.
+    - The pipelines would be run on a daily basis by 7 am every day. This can be mitigated as follows:
+      - change in teh schedule_interval parameter in the DAG. This also will require to assess when the data should be available for analysis. Accordingly it may require some scaling for the clusters to enhance the performance.
+    - The database needed to be accessed by 100+ people. This can be mitigated as follows:
+      - Scale up the Redshift cluster vertically by increasing the CPU and memory and add more instances. 
+
+
+  - ### **Proposed enhancements:**
