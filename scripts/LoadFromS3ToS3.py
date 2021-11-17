@@ -326,7 +326,7 @@ def getLookupTable(spark, df, srcColumn, tgtIdColumn, tgtColumn, output_data, tb
         new_lookup_df = look_df.unionAll(result)
     except Exception as e:
         print(e)
-        new_lookup_df = df.select([srcColumn]).distinct().filter(df[srcColumn].isNotNull()) \
+        new_lookup_df = df.select([srcColumn]).distinct().filter(df[srcColumn].isNotNull()&(fn.length(fn.trim(df[srcColumn])) > 0)) \
             .withColumn(tgtIdColumn, fn.row_number().over(idCol)) \
             .withColumnRenamed(srcColumn, tgtColumn)
         new_lookup_df = new_lookup_df.select(new_lookup_df[tgtIdColumn].cast(IntegerType()).alias(tgtIdColumn),tgtColumn)
