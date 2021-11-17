@@ -149,6 +149,7 @@ for the final model.
     - [SQLQueries.py](/scripts/SQLQueries.py): Script contains the common queries used by the LoadToRedShift.py. This script also is not used in production and can be used only for debugging.
     - [App_Table_DDL.sql](/SQL/App_Table_DDL.sql): DDL script for creating the tables in the first layer. It is used as guide while developing the pyspark scripts.
     - [Agg_App_Table_Star_DDL.sql](SQL/Agg_App_Table_Star_DDL.sql): DDL script for for creating the aggregate table. It is used as a guide in developing the DDL used within the python script.
+    - [results.xslx](results/results.xlsx): contains samples from the tables in the model.
 
   - ### **Other Scenarios:**
     - The data was increased by 100x: The following can mitigate these challenge:
@@ -161,6 +162,18 @@ for the final model.
     - The database needed to be accessed by 100+ people. This can be mitigated as follows:
       - Scale up the Redshift cluster vertically by increasing the CPU and memory and add more instances. 
 
+  - ### **Some results:**
+    The excel file [results](results/results.xlsx) contains sample from the model tables:
+    - app_category_dim sheet: contains sample from APP_CATEGORY table.
+    - content_rating_dim sheet: contains sample from CONTENT_RATING table.
+    - currency_type_dim sheet: contains sample from CURRENCY table.
+    - developer_dim sheet: contains sample from DEVELOPER table.
+    - permission_type_dim sheet: contains sample from PERMISSION_TYPE table.
+    - app sheet: contains sample from APP table.
+    - app_permission sheet: contains sample from APP_PERMISSION table.
+    - permission sheet: contains sample from permission table.
+    - app_fact: contains sample from APP_FACT table.
+    - cat_rank sheet: contains app categories ranked according to the number of installs.
 
   - ### **Proposed enhancements:**
     - APP table to be incremental.
